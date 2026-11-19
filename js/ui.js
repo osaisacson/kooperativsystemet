@@ -80,9 +80,9 @@ export function Carousel({ slides, badge = null }) {
         ${badge && html`<span class="img-badge">${badge}</span>`}
         ${slides.length > 1 && html`<span class="counter">${i + 1}/${slides.length}</span>`}</div>`}
       ${slides.length > 1 && html`${i > 0 && html`<button class="nav prev" aria-label="Föregående bild" onClick=${() => to(i - 1)}>‹</button>`}
-        ${i < slides.length - 1 && html`<button class="nav next" aria-label="Nästa bild" onClick=${() => to(i + 1)}>›</button>`}`}
+        ${i < slides.length - 1 && html`<button class="nav next" aria-label="Nästa bild" onClick=${() => to(i + 1)}>›</button>`}
+        <div class="dots">${slides.map((_, j) => html`<span class=${j === i ? 'on' : ''}></span>`)}</div>`}
     </div>
-    ${slides.length > 1 && html`<div class="dots">${slides.map((_, j) => html`<span class=${j === i ? 'on' : ''}></span>`)}</div>`}
     ${slides[i]?.text && html`<p class="slide-text">${slides[i].text}</p>`}
   </div>`;
 }
@@ -223,15 +223,11 @@ export function PostCard({ post: p, onChange, full = false }) {
     </div>
     ${p.slides.length ? html`<${Carousel} slides=${p.slides} badge=${badge} />`
       : html`<div class="textpost">${badge && html`<span class="img-badge corner-solo">${badge}</span>`}${p.caption}</div>`}
-    <div class="post-actions">
-      <a class="action" href=${'#/post/' + p.id} aria-label=${`${p.comment_count} kommentarer`}><${Icon} name="chat" size=${24} /><span>${p.comment_count}</span></a>
-      ${p.finance?.pending > 0 && html`<a class="muted small" href=${'#/post/' + p.id}>${p.finance.pending} ${p.finance.pending === 1 ? 'ansökan väntar' : 'ansökningar väntar'}</a>`}
-    </div>
     <div class="post-body">
+      ${p.slides.length > 0 && p.caption && html`<p class="caption">${p.caption}</p>`}
       ${p.finance && html`<${FinanceBox} post=${p} onApply=${() => setApplying(true)} />`}
-      ${p.slides.length > 0 && p.caption && html`<p class="caption"><a class="strong" href=${'#/profil/' + p.author.id}>${p.author.name}</a> ${p.caption}</p>`}
-      ${!full && p.first_comment && html`<p class="first-comment"><a class="strong" href=${p.first_comment.group ? '#/grupp/' + p.first_comment.group.id : '#/profil/' + p.first_comment.author.id}>${p.first_comment.group?.name || p.first_comment.author.name}</a> ${p.first_comment.body}</p>`}
-      ${!full && p.comment_count > 1 && html`<a class="muted comments-link" href=${'#/post/' + p.id}>Visa alla ${p.comment_count} kommentarer</a>`}
+      <a class="action" href=${'#/post/' + p.id} aria-label=${`${p.comment_count} kommentarer`}><${Icon} name="chat" size=${22} /><span>${p.comment_count}</span></a>
+      ${!full && p.first_comment && html`<a class="first-comment" href=${'#/post/' + p.id}><strong>${p.first_comment.group?.name || p.first_comment.author.name}</strong> ${p.first_comment.body}</a>`}
       <div class="time">${timeAgo(p.created_at)}${edited ? ' · redigerad' : ''}</div>
     </div>
     ${applying && html`<${ApplyForm} post=${p} onClose=${() => setApplying(false)}

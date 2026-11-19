@@ -124,13 +124,13 @@ main { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px); 
 .counter { padding: 3px 9px; border-radius: 12px; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; }
 .nav { position: absolute; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,.85); color: #222; font-size: 20px; line-height: 26px; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
 .nav.prev { left: 10px; } .nav.next { right: 10px; }
-.dots { display: flex; justify-content: center; gap: 4px; padding: 8px 0 0; }
-.dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
-.dots span.on { background: var(--accent); }
-.slide-text { margin: 8px 14px 0; padding: 8px 10px; background: var(--bg-soft); border-radius: 8px; font-size: 14px; }
+.dots { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 5px; pointer-events: none; }
+.dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.55); box-shadow: 0 0 2px rgba(0,0,0,.3); }
+.dots span.on { background: #fff; }
+.slide-text { margin: 0; padding: 10px 14px; background: var(--bg-soft); border-radius: 0 0 14px 14px; font-size: 14px; }
 .textpost { margin: 0 12px; padding: 28px 22px; min-height: 160px; display: grid; place-items: center; text-align: center; font-size: 19px; line-height: 1.4;
   border-radius: 14px; background: linear-gradient(135deg, var(--accent-soft), var(--bg-soft)); }
-.post-body { padding: 8px 14px 4px; }
+.post-body { padding: 10px 14px 4px; }
 .caption { font-size: 14.5px; white-space: pre-wrap; }
 .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .tag { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
@@ -348,9 +348,8 @@ fieldset.types legend { padding: 0; margin: 0 0 8px; }
   letter-spacing: .02em; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
 .textpost { position: relative; }
 .corner-solo { position: absolute; top: 12px; right: 12px; }
-.post-actions { display: flex; align-items: center; gap: 14px; padding: 8px 12px 0; }
-.action { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
-.first-comment { font-size: 14px; margin: 2px 0; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.action { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; margin: 2px 0 4px; }
+.first-comment { font-size: 14px; margin: 0 0 2px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* ---- Inloggning: logga + glömt lösenord ---- */
 .auth-logo { display: block; margin: 0 auto 12px; border-radius: 18px; }
