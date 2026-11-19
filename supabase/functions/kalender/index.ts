@@ -11,8 +11,35 @@ const z = (d: string) => new Date(d).toISOString().replace(/[-:]/g, '').replace(
 const esc = (t: string) => String(t || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, (m) => '\\' + m);
 const title = (c: string) => (c || '').split(/\n|(?<=[.!?])\s/)[0].slice(0, 80) || 'Evenemang';
 
+function ics(posts: any[], feed = false) {
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kooperativsystemet//SV', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  if (feed) lines.push('X-WR-CALNAME:Kooperativsystemet', 'X-WR-TIMEZONE:Europe/Stockholm', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H');
+  for (const p of posts) {
+    if (!p.event_start) continue;
+    const end = p.event_end || new Date(new Date(p.event_start).getTime() + 2 * 3600e3).toISOString();
+    const url = `${APP_URL}#/post/${p.id}`;
+    lines.push('BEGIN:VEVENT', `UID:${p.id}@kooperativsystemet`,
+      `SEQUENCE:${Math.floor(new Date(p.updated_at || p.created_at).getTime() / 1000) % 2147483647}`,
+      `DTSTAMP:${z(new Date().toISOString())}`, `LAST-MODIFIED:${z(p.updated_at || p.created_at)}`,
+      `DTSTART:${z(p.event_start)}`, `DTEND:${z(end)}`, `SUMMARY:${esc(title(p.caption))}`,
+      `LOCATION:${esc([p.event_address, p.event_city].filter(Boolean).join(', '))}`,
+      `DESCRIPTION:${esc((p.caption || '') + '\n\n' + url)}`, `URL:${url}`, 'END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
 Deno.serve(async (req) => {
-  const token = new URL(req.url).searchParams.get('t');
+  const params = new URL(req.url).searchParams;
+  // Ett enskilt evenemang: ?e=<inläggets id> (används av "Lägg till i min kalender" på iPhone)
+  const one = params.get('e');
+  if (one) {
+    if (!/^[0-9a-f-]{36}$/.test(one)) return new Response('Fel id', { status: 400 });
+    const { data: p } = await sb.from('posts').select('id, caption, event_start, event_end, event_address, event_city, created_at, updated_at').eq('id', one).eq('is_event', true).maybeSingle();
+    if (!p) return new Response('Evenemanget finns inte', { status: 404 });
+    return new Response(ics([p]), { headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': 'inline; filename="evenemang.ics"' } });
+  }
+  const token = params.get('t');
   if (!token || !/^[0-9a-f-]{36}$/.test(token)) return new Response('Saknar kalendernyckel', { status: 400 });
   const { data: who } = await sb.from('user_secrets').select('user_id').eq('calendar_token', token).maybeSingle();
   if (!who) return new Response('Okänd kalender', { status: 404 });
@@ -26,21 +53,7 @@ Deno.serve(async (req) => {
     ? await sb.from('posts').select('id, caption, event_start, event_end, event_address, event_city, created_at, updated_at').in('id', ids).eq('is_event', true)
     : { data: [] };
 
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kooperativsystemet//SV', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
-    'X-WR-CALNAME:Kooperativsystemet', 'X-WR-TIMEZONE:Europe/Stockholm', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
-  for (const p of posts || []) {
-    if (!p.event_start) continue;
-    const end = p.event_end || new Date(new Date(p.event_start).getTime() + 2 * 3600e3).toISOString();
-    const url = `${APP_URL}#/post/${p.id}`;
-    lines.push('BEGIN:VEVENT', `UID:${p.id}@kooperativsystemet`,
-      `SEQUENCE:${Math.floor(new Date(p.updated_at || p.created_at).getTime() / 1000) % 2147483647}`,
-      `DTSTAMP:${z(new Date().toISOString())}`, `LAST-MODIFIED:${z(p.updated_at || p.created_at)}`,
-      `DTSTART:${z(p.event_start)}`, `DTEND:${z(end)}`, `SUMMARY:${esc(title(p.caption))}`,
-      `LOCATION:${esc([p.event_address, p.event_city].filter(Boolean).join(', '))}`,
-      `DESCRIPTION:${esc((p.caption || '') + '\n\n' + url)}`, `URL:${url}`, 'END:VEVENT');
-  }
-  lines.push('END:VCALENDAR');
-  return new Response(lines.join('\r\n'), {
+  return new Response(ics(posts || [], true), {
     headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'max-age=900', 'Content-Disposition': 'inline; filename="kooperativsystemet.ics"' },
   });
 });

@@ -1,5 +1,5 @@
 // Startpunkt: enkel hash-router (#/sökväg) + bottenmenyn.
-import { html, render, useState, useEffect } from './lib.js';
+import { html, render, useState, useEffect, Component } from './lib.js';
 import { api } from './api/index.js';
 import { useStore, refreshMe, refreshBadges, toast } from './store.js';
 import { Icon, Avatar, Count } from './ui.js';
@@ -51,12 +51,30 @@ function BottomNav({ r }) {
   </nav>`;
 }
 
+// Fångar fel på en sida så att appen inte blir en vit, fryst skärm.
+class Safe extends Component {
+  constructor() { super(); this.state = { error: null }; }
+  componentDidCatch(error) { console.error(error); this.setState({ error }); }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return html`<div class="crash">
+      <h2>Något gick fel på den här sidan</h2>
+      <p class="muted">${String(this.state.error?.message || this.state.error).slice(0, 160)}</p>
+      <div class="btnrow"><a class="btn primary" href="#/" onClick=${() => this.setState({ error: null })}>Till flödet</a>
+        <button class="btn" onClick=${() => location.reload()}>Ladda om</button></div>
+    </div>`;
+  }
+}
+
 function App() {
   const s = useStore();
   const [r, setR] = useState(parse());
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    const onHash = () => { setR(parse()); window.scrollTo(0, 0); refreshBadges(); };
+    const onHash = () => {
+      setR(parse()); window.scrollTo(0, 0); refreshBadges();
+      document.body.classList.remove('locked');   // en meny som var öppen när man bytte sida ska inte låsa skärmen
+    };
     const linkError = api.takeLinkError?.() || new URLSearchParams(location.hash.slice(1)).get('error_description');
     if (linkError) {
       toast(/expired|invalid/i.test(linkError) ? 'Länken har gått ut eller redan använts. Be om en ny.' : linkError);
@@ -70,7 +88,7 @@ function App() {
   }, []);
   if (!ready) return html`<div class="splash">…</div>`;
   return html`<div class="app">
-    ${s.recovering ? html`<${NewPassword} />` : s.me ? html`<main key=${r.path + '?' + r.query}>${route(r)}</main><${BottomNav} r=${r} />` : html`<${AuthView} />`}
+    ${s.recovering ? html`<${NewPassword} />` : s.me ? html`<main key=${r.path + '?' + r.query}><${Safe}>${route(r)}<//></main><${BottomNav} r=${r} />` : html`<${AuthView} />`}
     ${s.toast && html`<div class="toast" role="status">${s.toast}</div>`}
   </div>`;
 }

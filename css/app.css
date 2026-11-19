@@ -480,3 +480,6 @@ a.todo small { display: block; }
 .cal-sub { padding: 8px 16px 0; font-size: 14px; }
 .cal-sub .nudge p { margin: 6px 0 10px; }
 .cal-sub small { display: block; margin-top: 8px; }
+.crash { padding: 48px 20px; text-align: center; }
+.crash h2 { font-size: 18px; margin-bottom: 8px; }
+.crash .btnrow { justify-content: center; margin-top: 16px; }

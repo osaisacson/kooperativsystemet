@@ -41,6 +41,17 @@ export function useStore() {
 
 export const go = (path) => { location.hash = '#' + path; };
 
+// Varje sida i appen får ett löpnummer i webbläsarens historik. Bakåtpilen går bara bakåt om föregående sida
+// också är en sida i appen – annars kunde den hamna utanför appen (t.ex. hos Google efter inloggning) och visa en vit sida.
+let lastIdx = 0;
+try { if (history.state?.idx == null) history.replaceState({ ...(history.state || {}), idx: 0 }, ''); lastIdx = history.state.idx; } catch { /* ok */ }
+addEventListener('hashchange', () => {
+  try { if (history.state?.idx == null) history.replaceState({ ...(history.state || {}), idx: lastIdx + 1 }, ''); lastIdx = history.state.idx; } catch { /* ok */ }
+});
+export function goBack(fallback = '/') {
+  if ((history.state?.idx ?? 0) > 0) history.back(); else go(fallback);
+}
+
 let toastTimer;
 export function toast(msg) {
   setState({ toast: msg });

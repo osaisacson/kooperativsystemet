@@ -1,7 +1,8 @@
 // Delade komponenter: ikoner, avatarer, inläggskort, kommentarer m.m.
 import { html, useState, useEffect, useRef } from './lib.js';
 import { api } from './api/index.js';
-import { state, go, toast, refreshBadges, refreshMe, attempt } from './store.js';
+import { SUPABASE_URL } from './config.js';
+import { state, go, goBack, toast, refreshBadges, refreshMe, attempt } from './store.js';
 import { fmtKr, fmtDate, timeAgo, PAYOUT_BANK_LIMIT, SPACE_COSTS, postType, fmtEventTime, eventIcs, googleCalendarUrl, eventTitle } from './util.js';
 
 const ICONS = {
@@ -37,7 +38,7 @@ export function Avatar({ src, name = '', size = 32 }) {
 export const Count = ({ n }) => (n > 0 ? html`<span class="count">${n > 99 ? '99+' : n}</span>` : null);
 
 export function Header({ title, back = false, right = null }) {
-  const onBack = () => (history.length > 1 ? history.back() : go('/'));
+  const onBack = () => goBack('/');
   return html`<header class="topbar">
     <div class="topbar-side">${back && html`<button class="iconbtn" aria-label="Tillbaka" onClick=${onBack}><${Icon} name="back" /></button>`}</div>
     <h1 class="topbar-title">${title}</h1>
@@ -280,7 +281,11 @@ export function EventBox({ post: p }) {
   function addToCalendar() {
     const ics = eventIcs(p, url);
     const ios = /iphone|ipad/i.test(navigator.userAgent);
-    if (ios) { location.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics); return; }
+    if (ios && api.mode === 'supabase') {
+      // Öppnas i ett eget fönster så att appen ligger kvar bakom (att byta ut appen mot filen gav en vit sida)
+      window.open(`${SUPABASE_URL}/functions/v1/kalender?e=${p.id}`, '_blank');
+      return;
+    }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
     a.download = eventTitle(p).replace(/[^\wåäöÅÄÖ -]/g, '').trim().slice(0, 40) + '.ics';

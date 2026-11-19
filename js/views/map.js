@@ -2,7 +2,7 @@
 // Kartan kommer från OpenStreetMap via biblioteket Leaflet (laddas först när kartan öppnas).
 import { html, useEffect, useRef } from '../lib.js';
 import { api } from '../api/index.js';
-import { useStore, useAsync, go } from '../store.js';
+import { useStore, useAsync, go, goBack } from '../store.js';
 import { Icon, Avatar, Loading } from '../ui.js';
 import { inPlace, placeLabel } from '../util.js';
 import { PlaceSwitcher } from './feed.js';
@@ -75,7 +75,7 @@ export function MapView() {
   const missing = here.length - placed.length;
   return html`<div class="page map-page">
     <header class="topbar brand">
-      <button class="iconbtn" aria-label="Tillbaka" onClick=${() => (history.length > 1 ? history.back() : go('/'))}><${Icon} name="back" /></button>
+      <button class="iconbtn" aria-label="Tillbaka" onClick=${() => goBack('/')}><${Icon} name="back" /></button>
       <${PlaceSwitcher} groups=${all} />
     </header>
     <div class="map-box" ref=${box}>${groups.loading && !groups.data && html`<${Loading} />`}</div>

@@ -1,7 +1,7 @@
 // Notiser, att göra-listan och meddelanden (enkla, utan lästkvitton eller andra beroendeskapande finesser).
 import { html, useState, useEffect, useRef } from '../lib.js';
 import { api } from '../api/index.js';
-import { useStore, useAsync, go, attempt, refreshBadges } from '../store.js';
+import { useStore, useAsync, go, goBack, attempt, refreshBadges } from '../store.js';
 import { Icon, Avatar, Header, UserRow, Loading, ErrorBox, linkify } from '../ui.js';
 import { fmtKr, timeAgo } from '../util.js';
 
@@ -102,7 +102,7 @@ export function Thread({ userId }) {
   const msgs = t.data || [];
   return html`<div class="page chat">
     <header class="topbar">
-      <div class="topbar-side"><button class="iconbtn" aria-label="Tillbaka" onClick=${() => (history.length > 1 ? history.back() : go('/meddelanden'))}><${Icon} name="back" /></button></div>
+      <div class="topbar-side"><button class="iconbtn" aria-label="Tillbaka" onClick=${() => goBack('/meddelanden')}><${Icon} name="back" /></button></div>
       <a class="chat-title" href=${'#/profil/' + userId}>${user && html`<${Avatar} src=${user.avatar_url} name=${user.name} size=${30} />`}<strong>${user?.name || ''}</strong></a>
       <div class="topbar-side right"></div>
     </header>
