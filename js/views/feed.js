@@ -5,20 +5,57 @@ import { useStore, useAsync, go, attempt, refreshBadges, setPlace } from '../sto
 import { Icon, Avatar, Count, Header, PostCard, Comments, Loading, ErrorBox, Sheet, GroupPicker, AddressPicker } from '../ui.js';
 import { PAYOUT_BANK_LIMIT, POST_TYPES, DEFAULT_FUNCTIONS, SPACE_COSTS, PLACE_LEVELS, postType, placeLabel, inPlace, fmtKr } from '../util.js';
 
-// Tips om att spara appen på hemskärmen – visas på mobilen tills man stänger det.
+// Tips om att spara appen på hemskärmen. Instruktionen anpassas efter telefon och webbläsare,
+// eftersom knapparna ligger på olika ställen. Visas tills man stänger det eller har sparat appen.
+let installPrompt = null;   // Android (Chrome, Edge, Samsung) kan installera direkt med en knapp
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
+
+export function installSteps(ua = navigator.userAgent, touch = navigator.maxTouchPoints || 0) {
+  const ipad = /ipad/i.test(ua) || (/macintosh/i.test(ua) && touch > 1);
+  const ios = /iphone|ipod/i.test(ua) || ipad;
+  const inApp = /FBAN|FBAV|FB_IAB|Instagram|LinkedInApp|Line\/|Snapchat|TikTok|musical_ly|; wv\)/i.test(ua);
+  const B = (t) => html`<b>${t}</b>`;
+  if (ios) {
+    if (inApp) return html`Öppna sidan i ${B('Safari')} först (via ${B('···')} eller ${B('Dela')}), sedan ${B('Dela')} → ${B('Lägg till på hemskärmen')}.`;
+    if (/CriOS/i.test(ua)) return html`Tryck på ${B('Dela ⬆︎')} uppe till höger, scrolla ner och välj ${B('Lägg till på hemskärmen')}.`;
+    if (/FxiOS|EdgiOS/i.test(ua)) return html`Tryck på menyn ${B('☰')} längst ner, välj ${B('Dela')} och sedan ${B('Lägg till på hemskärmen')}.`;
+    if (ipad) return html`Tryck på ${B('Dela ⬆︎')} uppe till höger och välj ${B('Lägg till på hemskärmen')}.`;
+    return html`Tryck på ${B('Dela ⬆︎')} längst ner (eller ${B('···')} → ${B('Dela')}), scrolla ner och välj ${B('Lägg till på hemskärmen')}.`;
+  }
+  if (/android/i.test(ua)) {
+    if (inApp) return html`Öppna sidan i ${B('Chrome')} först (via ${B('⋮')}), sedan ${B('⋮')} → ${B('Lägg till på startskärmen')}.`;
+    if (/SamsungBrowser/i.test(ua)) return html`Tryck på menyn ${B('≡')} längst ner och välj ${B('Lägg till sida på')} → ${B('Startskärm')}.`;
+    if (/Firefox/i.test(ua)) return html`Tryck på ${B('⋮')} och välj ${B('Lägg till på startskärmen')}.`;
+    return html`Tryck på ${B('⋮')} uppe till höger och välj ${B('Lägg till på startskärmen')} eller ${B('Installera app')}.`;
+  }
+  return null;   // dator: visas bara om webbläsaren kan installera med en knapp
+}
+
 function InstallHint() {
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-  const mobile = /iphone|ipad|android/i.test(navigator.userAgent);
   const read = () => { try { return localStorage.getItem('install-hint-closed') === '1'; } catch { return false; } };
   const [closed, setClosed] = useState(read);
-  if (standalone || !mobile || closed) return null;
-  const ios = /iphone|ipad/i.test(navigator.userAgent);
+  const [, rerender] = useState(0);
+  useEffect(() => {
+    const on = () => rerender((x) => x + 1);
+    addEventListener('beforeinstallprompt', on);
+    const done = () => { installPrompt = null; setClosed(true); };
+    addEventListener('appinstalled', done);
+    return () => { removeEventListener('beforeinstallprompt', on); removeEventListener('appinstalled', done); };
+  }, []);
+  const steps = installSteps();
+  if (standalone || closed || (!steps && !installPrompt)) return null;
   const close = () => { try { localStorage.setItem('install-hint-closed', '1'); } catch {} setClosed(true); };
+  async function install() {
+    const p = installPrompt; installPrompt = null;
+    p.prompt();
+    const { outcome } = await p.userChoice.catch(() => ({}));
+    if (outcome === 'accepted') setClosed(true); else rerender((x) => x + 1);
+  }
   return html`<div class="install-hint">
     <img src="icons/icon-192.png" alt="" width="40" height="40" />
-    <span><strong>Spara som app</strong><br />${ios
-      ? html`<b>···</b> → <b>Dela</b> → <b>Lägg till på hemskärmen</b>`
-      : html`<b>⋮</b> → <b>Lägg till på startskärmen</b>`}</span>
+    <span><strong>Spara som app</strong><br />${installPrompt ? 'Få appen på startskärmen med ett tryck.' : steps}</span>
+    ${installPrompt && html`<button class="btn small primary" onClick=${install}>Installera</button>`}
     <button class="iconbtn" aria-label="Stäng" onClick=${close}><${Icon} name="x" size=${18} /></button>
   </div>`;
 }
