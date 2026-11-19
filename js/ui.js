@@ -109,6 +109,25 @@ export function FinanceBox({ post, onApply }) {
   </div>`;
 }
 
+// Välj grupp genom att börja skriva namnet. Vald grupp visas som en rad med "Byt".
+export function GroupPicker({ groups, value, onChange, placeholder = 'Skriv gruppens namn…' }) {
+  const [q, setQ] = useState('');
+  const [editing, setEditing] = useState(!value);
+  const sel = groups.find((g) => g.id === value);
+  if (sel && !editing) return html`<div class="picked">
+    <${Avatar} src=${sel.avatar_url} name=${sel.name} size=${28} /><strong>${sel.name}</strong>
+    <button type="button" class="link" onClick=${() => setEditing(true)}>Byt</button></div>`;
+  const hits = q.trim() ? groups.filter((g) => g.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 6) : [];
+  const choose = (g) => { onChange(g.id); setQ(''); setEditing(false); };
+  return html`<div class="typeahead">
+    <input value=${q} onInput=${(e) => setQ(e.target.value)} placeholder=${placeholder} aria-label="Välj grupp" autofocus=${!!sel}
+      onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); if (hits[0]) choose(hits[0]); } if (e.key === 'Escape' && sel) setEditing(false); }} />
+    ${hits.length > 0 && html`<div class="ta-list" role="listbox">${hits.map((g) => html`<button type="button" role="option" class="ta-item" key=${g.id} onClick=${() => choose(g)}>
+      <${Avatar} src=${g.avatar_url} name=${g.name} size=${24} /><span>${g.name}</span></button>`)}</div>`}
+    ${q.trim() && !hits.length && html`<small class="muted">Ingen av dina grupper heter så.</small>`}
+  </div>`;
+}
+
 export function ApplyForm({ post, onClose, onDone }) {
   const f = post.finance;
   const single = f.mode === 'single';
@@ -140,9 +159,7 @@ export function ApplyForm({ post, onClose, onDone }) {
   return html`<${Modal} title="Ansök om pengar" onClose=${onClose}>
     <form class="form" onSubmit=${submit}>
       <div class="field"><div class="label small">Vilken grupp söker du för?</div>
-        <div class="group-pick">${groups.map((g) => html`<button type="button" key=${g.id}
-          class=${'gp' + (groupId === g.id ? ' on' : '')} onClick=${() => setGroupId(g.id)}>
-          <${Avatar} src=${g.avatar_url} name=${g.name} size=${28} /><span>${g.name}</span></button>`)}</div>
+        <${GroupPicker} groups=${groups} value=${groupId} onChange=${setGroupId} />
         <small>Ansökan visas som gruppens, med ditt namn bredvid.</small></div>
       ${single
         ? html`<p>Den här finansieringen går till en mottagare. Ni söker hela beloppet: <strong>${fmtKr(f.total)}</strong>.</p>`

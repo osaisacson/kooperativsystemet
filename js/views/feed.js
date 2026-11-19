@@ -2,7 +2,7 @@
 import { html, useState, useEffect } from '../lib.js';
 import { api } from '../api/index.js';
 import { useStore, useAsync, go, attempt, refreshBadges, setPlace } from '../store.js';
-import { Icon, Avatar, Count, Header, PostCard, Comments, Loading, ErrorBox, Sheet } from '../ui.js';
+import { Icon, Avatar, Count, Header, PostCard, Comments, Loading, ErrorBox, Sheet, GroupPicker } from '../ui.js';
 import { PAYOUT_BANK_LIMIT, POST_TYPES, DEFAULT_FUNCTIONS, SPACE_COSTS, PLACE_LEVELS, postType, placeLabel, inPlace, fmtKr } from '../util.js';
 
 // Tips om att spara appen på hemskärmen – visas på mobilen tills man stänger det.
@@ -50,7 +50,6 @@ function PlaceSwitcher({ groups }) {
     <span>${placeLabel(o)}</span>${o.level !== 'world' && html`<small class="muted">${PLACE_LEVELS[o.level]}</small>`}</button>`;
   return html`<button class="place-btn" onClick=${() => setOpen(true)} aria-label=${`Visar ${placeLabel(place)}. Byt plats`}>
       <span class="place-name">${placeLabel(place)}<span class="chev" aria-hidden="true">▾</span></span>
-      ${place.level !== 'world' && html`<small class="place-hint">visar ${PLACE_LEVELS[place.level]} · byt till region eller land</small>`}
     </button>
     ${open && html`<${Sheet} onClose=${() => setOpen(false)}>
       ${options.map(row)}
@@ -94,8 +93,7 @@ export function Home() {
     <header class="topbar brand">
       <${PlaceSwitcher} groups=${groups.data || []} />
       <div class="topbar-side right">
-        ${s.badges.todos > 0 && html`<a class="iconbtn" href="#/att-gora" aria-label="Att göra"><${Icon} name="check" /><${Count} n=${s.badges.todos} /></a>`}
-        <a class="iconbtn" href="#/notiser" aria-label="Notiser"><${Icon} name="bell" /><${Count} n=${s.badges.notifications} /></a>
+        ${s.badges.todos > 0 && html`<a class="iconbtn" href="#/att-gora" aria-label="Att göra med finansiering"><${Icon} name="check" /><${Count} n=${s.badges.todos} /></a>`}
         <a class="iconbtn" href="#/meddelanden" aria-label="Meddelanden"><${Icon} name="chat" /><${Count} n=${s.badges.messages} /></a>
       </div>
     </header>
@@ -112,12 +110,12 @@ export function Home() {
 
     <div class="filterbar" role="tablist">
       ${TABS.map(([k, label]) => html`<button role="tab" aria-selected=${tab === k} class=${tab === k ? 'on' : ''} onClick=${() => choose(k)}>
-        ${label}${k === 'finansiering' && available > 0 ? html`<small class="tab-sum">${fmtKr(available)}</small>` : ''}</button>`)}
+        ${label}${k === 'finansiering' && available > 0 ? html` <span class="tab-sum">${fmtKr(available)}</span>` : ''}</button>`)}
     </div>
     <div class="tab-head">
       <div class="tab-info">
         ${tab === 'flode' && html`<span class="muted small">Allt från grupperna i ${where}</span>`}
-        ${tab === 'finansiering' && html`<span class="small"><strong>${fmtKr(available)}</strong> <span class="muted">går att söka i ${where} just nu</span></span>`}
+        ${tab === 'finansiering' && html`<span class="muted small">Pengar som grupper i ${where} kan söka just nu</span>`}
         ${tab === 'lokal' && html`<span class="muted small">Lokaler att låna, använda mot en gentjänst eller hyra i ${where}</span>`}
         ${tab === 'minne' && html`<span class="muted small">Inlägg som är värda att minnas, för att andra kan ha nytta av dem. Tryck på <${Icon} name="memory" size=${13} /> längst ner till höger i ett inlägg för att spara det här.</span>`}
       </div>
@@ -327,9 +325,7 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
             <p>Inlägg ska helst höra till en grupp. Gå med i en grupp eller skapa en ny.</p>
             <div class="btnrow"><a class="btn small" href="#/sok?flik=grupper">Hitta grupper</a><a class="btn small primary" href="#/ny-grupp?next=/ny">Skapa grupp</a></div>
           </div>`
-        : html`<div class="group-pick">${myGroups.map((g) => html`<button type="button" key=${g.id}
-            class=${'gp' + (!isPersonal && groupId === g.id ? ' on' : '')} onClick=${() => { setGroupId(g.id); setPersonal(false); }}>
-            <${Avatar} src=${g.avatar_url} name=${g.name} size=${28} /><span>${g.name}</span></button>`)}</div>
+        : html`${!isPersonal && html`<${GroupPicker} groups=${myGroups} value=${groupId} onChange=${(id) => { setGroupId(id); setPersonal(false); }} />`}
           ${isPersonal
             ? html`<p class="hint">Personligt inlägg – det hör inte till någon grupp. <button type="button" class="link" onClick=${() => { setPersonal(false); setGroupId(groupId || myGroups[0].id); }}>Välj en grupp i stället</button></p>`
             : html`<button type="button" class="link subtle" onClick=${() => setPersonal(true)}>Posta utan grupp</button>`}`}

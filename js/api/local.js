@@ -374,7 +374,7 @@ export const api = {
   async listTodos() {
     const me = needMe();
     const mine = new Set(db.posts.filter((p) => p.author_id === me).map((p) => p.id));
-    return db.comments.filter((c) => mine.has(c.post_id) && (c.status === 'granted' || c.status === 'paid'))
+    return db.comments.filter((c) => mine.has(c.post_id) && ['applied', 'granted', 'paid'].includes(c.status))
       .sort((a, b) => (b.decided_at || '').localeCompare(a.decided_at || ''))
       .map((c) => {
         const p = db.posts.find((x) => x.id === c.post_id);
@@ -428,7 +428,7 @@ export const api = {
     return {
       notifications: db.notifications.filter((n) => n.user_id === me && !n.read).length,
       messages: db.messages.filter((m) => m.to_id === me && !m.read).length,
-      todos: db.comments.filter((c) => mine.has(c.post_id) && c.status === 'granted').length,
+      todos: db.comments.filter((c) => mine.has(c.post_id) && (c.status === 'granted' || c.status === 'applied')).length,
     };
   },
 };

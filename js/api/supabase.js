@@ -258,7 +258,7 @@ export const api = {
   async listTodos() {
     const rows = ok(await sb.from('comments')
       .select(`*, author:profiles(${PROFILE}), group:groups(id,name,avatar_url), post:posts!inner(id, caption, author_id, group:groups(id,name,avatar_url))`)
-      .in('status', ['granted', 'paid']).eq('post.author_id', needMe()).order('decided_at', { ascending: false }));
+      .in('status', ['applied', 'granted', 'paid']).eq('post.author_id', needMe()).order('decided_at', { ascending: false }));
     const payouts = rows.length ? ok(await sb.from('payouts').select('*').in('comment_id', rows.map((r) => r.id))) : [];
     const byId = Object.fromEntries(payouts.map((x) => [x.comment_id, x.details]));
     return rows.map((r) => ({ ...r, payout: byId[r.id] ?? null }));
@@ -304,7 +304,7 @@ export const api = {
     const [notifications, messages, todos] = await Promise.all([
       count(sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', meId).eq('read', false)),
       count(sb.from('messages').select('id', { count: 'exact', head: true }).eq('to_id', meId).eq('read', false)),
-      count(sb.from('comments').select('id, post:posts!inner(author_id)', { count: 'exact', head: true }).eq('status', 'granted').eq('post.author_id', meId)),
+      count(sb.from('comments').select('id, post:posts!inner(author_id)', { count: 'exact', head: true }).in('status', ['applied', 'granted']).eq('post.author_id', meId)),
     ]);
     return { notifications, messages, todos };
   },

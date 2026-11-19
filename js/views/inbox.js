@@ -29,23 +29,30 @@ export function Todos() {
     if (!confirm(`Har du skickat ${fmtKr(x.applied_amount)} till ${x.group?.name || x.author.name}?`)) return;
     if (await attempt(() => api.markPaid(x.id), 'Markerat som utbetalt')) { refreshBadges(); t.reload(); }
   }
-  const open = (t.data || []).filter((x) => x.status === 'granted');
-  const done = (t.data || []).filter((x) => x.status === 'paid');
-  const item = (x) => {
+  const all = t.data || [];
+  const decide = all.filter((x) => x.status === 'applied');
+  const open = all.filter((x) => x.status === 'granted');
+  const done = all.filter((x) => x.status === 'paid');
+  const who = (x) => html`<strong>${x.group?.name || x.author.name}</strong>${x.group ? html` <span class="muted">(via ${x.author.name})</span>` : ''}`;
+  const postLink = (x) => html`<small><a href=${'#/post/' + x.post.id}>${x.post.caption.slice(0, 60)}${x.post.caption.length > 60 ? '…' : ''}</a></small>`;
+  const payItem = (x) => {
     const bank = x.payout?.startsWith('Bankkonto');
     const to = x.payout?.replace(/^(Swish|Bankkonto):\s*/, '') || '(uppgift saknas)';
     return html`<label class=${'todo' + (x.status === 'paid' ? ' done' : '')} key=${x.id}>
       <input type="checkbox" checked=${x.status === 'paid'} disabled=${x.status === 'paid'} onChange=${(e) => { e.target.checked = false; pay(x); }} />
-      <span>${bank ? 'Betala' : 'Swisha'} <strong>${x.group?.name || x.author.name}</strong>${x.group ? html` <span class="muted">(via ${x.author.name})</span>` : ''} ${fmtKr(x.applied_amount)} till ${bank ? 'bankkonto ' : ''}<strong>${to}</strong>
-        <small><a href=${'#/post/' + x.post.id}>${x.post.group ? x.post.group.name + ': ' : ''}${x.post.caption.slice(0, 60)}${x.post.caption.length > 60 ? '…' : ''}</a></small></span>
+      <span>${bank ? 'Betala' : 'Swisha'} ${who(x)} ${fmtKr(x.applied_amount)} till ${bank ? 'bankkonto ' : ''}<strong>${to}</strong>${postLink(x)}</span>
     </label>`;
   };
   return html`<div class="page">
     <${Header} title="Att göra" back />
     ${t.loading && !t.data ? html`<${Loading} />` : t.error ? html`<${ErrorBox} error=${t.error} />` : html`
-      <p class="hint pad">När du beviljar en ansökan hamnar utbetalningen här. Bocka av när pengarna är skickade – då minskar det som finns kvar på inlägget.</p>
-      ${open.length ? html`<div class="list">${open.map(item)}</div>` : html`<p class="empty">Inget att göra just nu.</p>`}
-      ${done.length > 0 && html`<div class="label pad-x">Klart</div><div class="list">${done.map(item)}</div>`}`}
+      ${!decide.length && !open.length && html`<p class="empty">Inget att göra just nu.</p>`}
+      ${decide.length > 0 && html`<div class="label pad-x">Ansökningar att besluta om</div>
+        <div class="list">${decide.map((x) => html`<a class="todo" key=${x.id} href=${'#/post/' + x.post.id}>
+          <span class="todo-dot" aria-hidden="true"></span>
+          <span>${who(x)} söker ${fmtKr(x.applied_amount)}<small class="muted">Öppna inlägget för att bevilja eller avslå</small></span></a>`)}</div>`}
+      ${open.length > 0 && html`<div class="label pad-x">Att betala ut</div><div class="list">${open.map(payItem)}</div>`}
+      ${done.length > 0 && html`<div class="label pad-x">Klart</div><div class="list">${done.map(payItem)}</div>`}`}
   </div>`;
 }
 

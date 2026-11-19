@@ -382,7 +382,8 @@ input, textarea, select { font-size: 16px !important; }
 .place-opt.on { font-weight: 700; color: var(--accent); }
 .sheet-label { padding: 12px 18px 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--line); }
 .sheet { max-height: 80dvh; overflow: auto; }
-.tab-sum { display: block; font-size: 11px; font-weight: 600; color: var(--accent); margin-top: 1px; }
+.tab-sum { font-weight: 700; color: var(--accent); white-space: nowrap; }
+.filterbar button { flex: 1 1 auto; padding-inline: 6px; font-size: 13.5px; white-space: nowrap; }
 .tab-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 16px; min-height: 48px; }
 .tab-info { flex: 1; min-width: 0; }
 .chips.tight { padding: 0; }
@@ -409,3 +410,14 @@ fieldset.place-fields legend { padding: 0; margin: 4px 0 4px; }
 .space-filters input { width: 100%; padding: 9px 30px 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-soft); }
 .space-filters .clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%; color: var(--muted); }
 .tab-info .icon { display: inline-block; vertical-align: -2px; }
+
+/* ---- Välj grupp genom att skriva ---- */
+.picked { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft); font-weight: 400; }
+.picked strong { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.typeahead { display: flex; flex-direction: column; gap: 4px; }
+.ta-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.ta-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; text-align: left; font-weight: 500; border-bottom: 1px solid var(--line); }
+.ta-item:last-child { border-bottom: 0; }
+.ta-item:hover { background: var(--bg-soft); }
+.todo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--blue); margin: 6px 6px 0; flex: none; }
+a.todo small { display: block; }
