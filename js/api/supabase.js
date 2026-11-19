@@ -1,0 +1,283 @@
+// Riktig backend: Supabase (Postgres + inloggning + bildlagring). Se supabase/setup.sql för tabeller och regler.
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js';
+import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, sortCategories, resizeImage } from '../util.js';
+
+// Kommer man hit via länken i ett "återställ lösenord"-mejl står det type=recovery i adressen.
+// Läses av innan Supabase hinner ta bort det.
+let recovering = /type=recovery/.test(location.hash);
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let meId = null;
+
+const ok = ({ data, error }) => {
+  if (error) throw new Error(translate(error.message));
+  return data;
+};
+function translate(msg) {
+  if (/Invalid login credentials/i.test(msg)) return 'Fel e-post eller lösenord.';
+  if (/already registered/i.test(msg)) return 'Det finns redan ett konto med den e-postadressen.';
+  if (/Email not confirmed/i.test(msg)) return 'Bekräfta din e-post först (kolla inkorgen).';
+  if (/row-level security/i.test(msg)) return 'Du har inte behörighet att göra det.';
+  if (/Password should be/i.test(msg)) return 'Lösenordet måste vara minst 6 tecken.';
+  return msg;
+}
+function needMe() { if (!meId) throw new Error('Du är inte inloggad.'); return meId; }
+
+async function upload(file, max = 1280) {
+  const blob = await resizeImage(file, max);
+  const path = `${needMe()}/${crypto.randomUUID()}.jpg`;
+  ok(await sb.storage.from('media').upload(path, blob, { contentType: 'image/jpeg' }));
+  return sb.storage.from('media').getPublicUrl(path).data.publicUrl;
+}
+
+const PROFILE = 'id,name,avatar_url';
+const POST_SELECT = `*, author:profiles(${PROFILE}), group:groups(id,name,avatar_url), slides:post_slides(id,position,image_url,text), comments(id,applied_amount,status,body,created_at,parent_id,author:profiles(id,name),group:groups(id,name))`;
+
+function shapePost(p) {
+  const cs = p.comments || [];
+  const { comments, ...rest } = p;
+  const first = cs.filter((c) => !c.parent_id).sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+  return {
+    ...rest, slides: (p.slides || []).sort((a, b) => a.position - b.position), comment_count: cs.length, finance: financeSummary(p, cs),
+    first_comment: first ? { body: first.body, author: first.author, group: first.group } : null,
+  };
+}
+async function ensureCategories(cats) {
+  if (cats.length) ok(await sb.from('categories').upsert(cats.map((name) => ({ name })), { onConflict: 'name', ignoreDuplicates: true }));
+}
+async function writeSlides(postId, slides) {
+  const keep = slides.filter((s) => s.id).map((s) => s.id);
+  let del = sb.from('post_slides').delete().eq('post_id', postId);
+  if (keep.length) del = del.not('id', 'in', `(${keep.join(',')})`);
+  ok(await del);
+  for (const [i, s] of slides.entries()) {
+    const row = { post_id: postId, position: i, text: (s.text || '').trim(), image_url: s.file ? await upload(s.file) : s.image_url };
+    if (s.id) ok(await sb.from('post_slides').update(row).eq('id', s.id));
+    else ok(await sb.from('post_slides').insert(row));
+  }
+}
+
+export const api = {
+  mode: 'supabase',
+
+  // ---- Konto ----
+  onAuthChange(cb) {
+    // Supabase rekommenderar att inte göra egna anrop direkt i den här callbacken.
+    const { data } = sb.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') recovering = true;
+      setTimeout(cb, 0);
+    });
+    return () => data.subscription.unsubscribe();
+  },
+  async getMe() {
+    const { data: { session } } = await sb.auth.getSession();
+    meId = session?.user?.id ?? null;
+    if (!meId) return null;
+    return ok(await sb.from('profiles').select('*').eq('id', meId).maybeSingle());
+  },
+  async signUp({ email, password, name, nickname, avatarFile }) {
+    if (!name.trim()) throw new Error('Skriv ditt namn.');
+    const data = ok(await sb.auth.signUp({ email: email.trim(), password, options: { data: { name: name.trim(), nickname: (nickname || '').trim() } } }));
+    if (!data.session) return { needsConfirmation: true };
+    meId = data.user.id;
+    if (avatarFile) await api.updateProfile({ avatarFile });
+    return { needsConfirmation: false };
+  },
+  async signIn({ email, password }) { ok(await sb.auth.signInWithPassword({ email: email.trim(), password })); },
+  async signOut() { await sb.auth.signOut(); meId = null; },
+  isRecovering() { return recovering; },
+  async requestPasswordReset(email) {
+    if (!/^\S+@\S+\.\S+$/.test((email || '').trim())) throw new Error('Ange din e-postadress.');
+    ok(await sb.auth.resetPasswordForEmail(email.trim(), { redirectTo: location.origin + location.pathname }));
+  },
+  async setNewPassword(password) {
+    if ((password || '').length < 6) throw new Error('Lösenordet måste vara minst 6 tecken.');
+    ok(await sb.auth.updateUser({ password }));
+    recovering = false;
+  },
+  async touch() { if (meId) await sb.rpc('touch'); },
+  async updateProfile({ name, nickname, avatarFile }) {
+    const patch = {};
+    if (name?.trim()) patch.name = name.trim();
+    if (nickname !== undefined) patch.nickname = nickname.trim() || null;
+    if (avatarFile) patch.avatar_url = await upload(avatarFile, 400);
+    if (Object.keys(patch).length) ok(await sb.from('profiles').update(patch).eq('id', needMe()));
+  },
+
+  // ---- Personer ----
+  async listUsers(q = '') {
+    let query = sb.from('profiles').select(PROFILE).order('name');
+    if (q.trim()) query = query.ilike('name', `%${q.trim()}%`);
+    return ok(await query);
+  },
+  async getUser(id) {
+    const p = ok(await sb.from('profiles').select(`${PROFILE}, nickname, created_at, group_members(role, group:groups(id,name,avatar_url))`).eq('id', id).single());
+    const { group_members, ...rest } = p;
+    return { ...rest, groups: group_members.map((m) => ({ ...m.group, role: m.role })) };
+  },
+
+  // ---- Grupper ----
+  async listGroups(q = '') {
+    let query = sb.from('groups').select('*, group_members(user_id)').order('last_activity_at', { ascending: false });
+    if (q.trim()) query = query.or(`name.ilike.%${q.trim()}%,description.ilike.%${q.trim()}%`);
+    return ok(await query).map(({ group_members, ...g }) => ({ ...g, member_count: group_members.length, is_member: group_members.some((m) => m.user_id === meId) }));
+  },
+  async myGroups() {
+    const rows = ok(await sb.from('group_members').select('role, group:groups(id,name,avatar_url)').eq('user_id', needMe()));
+    return rows.map((r) => ({ ...r.group, role: r.role })).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+  },
+  async getGroup(id) {
+    const g = ok(await sb.from('groups').select(`*, group_members(role, joined_at, user:profiles(${PROFILE})), highlights(*)`).eq('id', id).single());
+    const { group_members, highlights, ...rest } = g;
+    return {
+      ...rest,
+      members: group_members.sort((a, b) => (a.role === b.role ? a.joined_at.localeCompare(b.joined_at) : a.role === 'admin' ? -1 : 1)),
+      highlights: highlights.sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    };
+  },
+  async createGroup({ name, description, homepage, avatarFile }) {
+    if (!name?.trim()) throw new Error('Ge gruppen ett namn.');
+    const url = normalizeUrl(homepage);
+    const avatar_url = avatarFile ? await upload(avatarFile, 400) : null;
+    return ok(await sb.from('groups').insert({ name: name.trim(), description: (description || '').trim(), homepage: url, avatar_url, created_by: needMe() }).select().single());
+  },
+  async updateGroup(id, { name, description, homepage, avatarFile }) {
+    const patch = {};
+    if (name?.trim()) patch.name = name.trim();
+    if (description !== undefined) patch.description = description.trim();
+    if (homepage !== undefined) patch.homepage = normalizeUrl(homepage);
+    if (avatarFile) patch.avatar_url = await upload(avatarFile, 400);
+    ok(await sb.from('groups').update(patch).eq('id', id));
+  },
+  async deleteGroup(id) {
+    // Gruppens inlägg tas bort först (annars blir de kvar som personliga inlägg).
+    ok(await sb.from('posts').delete().eq('group_id', id));
+    const rows = ok(await sb.from('groups').delete().eq('id', id).select('id'));
+    if (!rows.length) throw new Error('Bara gruppens admins kan ta bort gruppen.');
+  },
+  async joinGroup(id) { ok(await sb.from('group_members').insert({ group_id: id, user_id: needMe() })); },
+  async leaveGroup(id) { ok(await sb.from('group_members').delete().eq('group_id', id).eq('user_id', needMe())); },
+  async setMemberRole(gid, uid, role) { ok(await sb.from('group_members').update({ role }).eq('group_id', gid).eq('user_id', uid)); },
+  async removeMember(gid, uid) { ok(await sb.from('group_members').delete().eq('group_id', gid).eq('user_id', uid)); },
+  async saveHighlight(gid, { id, title, post_ids }) {
+    if (!title?.trim()) throw new Error('Ge höjdpunkten ett namn.');
+    if (id) ok(await sb.from('highlights').update({ title: title.trim(), post_ids }).eq('id', id));
+    else ok(await sb.from('highlights').insert({ group_id: gid, title: title.trim(), post_ids }));
+  },
+  async deleteHighlight(id) { ok(await sb.from('highlights').delete().eq('id', id)); },
+
+  // ---- Inlägg ----
+  async listCategories() { return sortCategories(ok(await sb.from('categories').select('name')).map((c) => c.name)); },
+  async listPosts({ resources = false, category = null, groupId = null, authorId = null, q = '', feed = false } = {}) {
+    let query = sb.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(200);
+    if (resources) query = query.eq('is_resource', true);
+    if (category) query = query.contains('categories', [category]);
+    if (groupId) query = query.eq('group_id', groupId);
+    if (authorId) query = query.eq('author_id', authorId);
+    if (q.trim()) query = query.ilike('caption', `%${q.trim()}%`);
+    const ps = ok(await query).map(shapePost);
+    return feed ? ps.filter(visibleInFeed) : ps;
+  },
+  async getPost(id) {
+    const p = ok(await sb.from('posts').select(POST_SELECT).eq('id', id).maybeSingle());
+    if (!p) throw new Error('Inlägget finns inte (längre).');
+    const comments = ok(await sb.from('comments').select(`*, author:profiles(${PROFILE}), group:groups(id,name,avatar_url)`).eq('post_id', id).order('created_at'));
+    const ids = comments.filter((c) => c.status).map((c) => c.id);
+    const payouts = ids.length ? ok(await sb.from('payouts').select('*').in('comment_id', ids)) : [];
+    const byId = Object.fromEntries(payouts.map((x) => [x.comment_id, x.details]));
+    return { ...shapePost(p), comments: comments.map((c) => ({ ...c, payout: byId[c.id] ?? null })) };
+  },
+  async createPost(input) {
+    const v = normalizePostInput(input);
+    await ensureCategories(v.categories);
+    const post = ok(await sb.from('posts').insert({
+      author_id: needMe(), group_id: v.groupId, caption: v.caption, is_resource: v.isResource, categories: v.categories,
+      fin_total: v.finance?.total ?? null, fin_mode: v.finance?.mode ?? null, fin_expires_at: v.finance?.expiresAt ?? null,
+    }).select('id').single());
+    await writeSlides(post.id, v.slides);
+    return post.id;
+  },
+  async updatePost(id, input) {
+    const v = normalizePostInput(input);
+    await ensureCategories(v.categories);
+    const current = ok(await sb.from('posts').select('fin_total').eq('id', id).single());
+    if (current.fin_total != null && !v.finance) throw new Error('Ett finansieringsinlägg kan inte byta typ. Stäng det i stället via ··· på inlägget.');
+    const patch = { group_id: v.groupId, caption: v.caption, is_resource: v.isResource, categories: v.categories, updated_at: new Date().toISOString() };
+    if (v.finance) {
+      if (current.fin_total == null) Object.assign(patch, { fin_total: v.finance.total, fin_mode: v.finance.mode });
+      patch.fin_expires_at = v.finance.expiresAt;
+    }
+    ok(await sb.from('posts').update(patch).eq('id', id));
+    await writeSlides(id, v.slides);
+  },
+  async deletePost(id) {
+    const rows = ok(await sb.from('posts').delete().eq('id', id).select('id'));
+    if (!rows.length) throw new Error('Du får inte ta bort det här inlägget.');
+  },
+  async setFinanceClosed(id, closed) { ok(await sb.from('posts').update({ fin_closed: !!closed }).eq('id', id)); },
+
+  // ---- Kommentarer och finansiering ----
+  async addComment(postId, body, parentId = null) {
+    if (!body?.trim()) throw new Error('Skriv något först.');
+    ok(await sb.from('comments').insert({ post_id: postId, author_id: needMe(), parent_id: parentId, body: body.trim() }));
+  },
+  async applyForFunding(postId, { groupId, body, amount, payout }) {
+    if (!groupId) throw new Error('Välj en grupp du är med i att söka för.');
+    ok(await sb.rpc('apply_for_funding', { p_post: postId, p_group: groupId, p_body: body, p_amount: amount, p_payout: payout }));
+  },
+  async decideApplication(commentId, decision) { ok(await sb.rpc('decide_application', { p_comment: commentId, p_decision: decision })); },
+  async markPaid(commentId) { ok(await sb.rpc('mark_paid', { p_comment: commentId })); },
+  async listTodos() {
+    const rows = ok(await sb.from('comments')
+      .select(`*, author:profiles(${PROFILE}), group:groups(id,name,avatar_url), post:posts!inner(id, caption, author_id, group:groups(id,name,avatar_url))`)
+      .in('status', ['granted', 'paid']).eq('post.author_id', needMe()).order('decided_at', { ascending: false }));
+    const payouts = rows.length ? ok(await sb.from('payouts').select('*').in('comment_id', rows.map((r) => r.id))) : [];
+    const byId = Object.fromEntries(payouts.map((x) => [x.comment_id, x.details]));
+    return rows.map((r) => ({ ...r, payout: byId[r.id] ?? null }));
+  },
+
+  // ---- Notiser ----
+  async listNotifications() {
+    return ok(await sb.from('notifications').select(`*, actor:profiles!notifications_actor_id_fkey(${PROFILE})`)
+      .eq('user_id', needMe()).order('created_at', { ascending: false }).limit(100));
+  },
+  async markNotificationsRead() { ok(await sb.from('notifications').update({ read: true }).eq('user_id', needMe()).eq('read', false)); },
+
+  // ---- Meddelanden ----
+  async listConversations() {
+    const me = needMe();
+    const msgs = ok(await sb.from('messages').select('*').or(`from_id.eq.${me},to_id.eq.${me}`).order('created_at', { ascending: false }).limit(500));
+    const map = new Map();
+    for (const m of msgs) {
+      const other = m.from_id === me ? m.to_id : m.from_id;
+      if (!map.has(other)) map.set(other, { userId: other, last: m, unread: 0 });
+      if (m.to_id === me && !m.read) map.get(other).unread++;
+    }
+    const ids = [...map.keys()];
+    const people = ids.length ? ok(await sb.from('profiles').select(PROFILE).in('id', ids)) : [];
+    const byId = Object.fromEntries(people.map((p) => [p.id, p]));
+    return [...map.values()].map(({ userId, ...c }) => ({ ...c, user: byId[userId] || { id: userId, name: 'Borttagen användare' } }));
+  },
+  async getThread(userId) {
+    const me = needMe();
+    const msgs = ok(await sb.from('messages').select('*')
+      .or(`and(from_id.eq.${me},to_id.eq.${userId}),and(from_id.eq.${userId},to_id.eq.${me})`).order('created_at'));
+    ok(await sb.from('messages').update({ read: true }).eq('to_id', me).eq('from_id', userId).eq('read', false));
+    return msgs;
+  },
+  async sendMessage(userId, body) {
+    if (!body?.trim()) throw new Error('Skriv något först.');
+    ok(await sb.from('messages').insert({ from_id: needMe(), to_id: userId, body: body.trim() }));
+  },
+
+  async badges() {
+    if (!meId) return { notifications: 0, messages: 0, todos: 0 };
+    const count = async (q) => (await q).count ?? 0;
+    const [notifications, messages, todos] = await Promise.all([
+      count(sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', meId).eq('read', false)),
+      count(sb.from('messages').select('id', { count: 'exact', head: true }).eq('to_id', meId).eq('read', false)),
+      count(sb.from('comments').select('id, post:posts!inner(author_id)', { count: 'exact', head: true }).eq('status', 'granted').eq('post.author_id', meId)),
+    ]);
+    return { notifications, messages, todos };
+  },
+};

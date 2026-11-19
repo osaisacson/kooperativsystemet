@@ -1,0 +1,73 @@
+# Kooperativsystemet
+
+En app för grupper som arbetar med småskaliga omställningar av vatten, avfall, energi, ekonomi med mera.
+Inlägg hör till grupper. Inlägg kan läggas i **gemensamma resurser** (metoder, lokaler, finansiering …), och
+**finansieringsinlägg** gör det möjligt att dela ut pengar som andra söker i kommentarerna.
+
+- Ingen byggprocess – vanliga filer (HTML, CSS, JavaScript med [Preact](https://preactjs.com) + htm från CDN).
+- Backend: [Supabase](https://supabase.com) (gratisnivån räcker). Utan Supabase körs appen i **demoläge** där allt sparas i webbläsaren.
+- Allt i appen är på svenska.
+
+## Kör lokalt (demoläge)
+
+```bash
+python3 -m http.server 5173
+```
+
+Öppna http://localhost:5173. Skapa ett konto (det stannar i din webbläsare). Exempelgrupper och inlägg finns redan.
+Knappen **Återställ** överst i flödet tömmer demodatan.
+
+## Koppla in en riktig, gratis backend (Supabase) – ca 10 minuter
+
+1. Skapa ett konto och ett nytt projekt på [supabase.com](https://supabase.com) (välj region EU, t.ex. Stockholm/Frankfurt).
+2. Gå till **SQL Editor → New query**, klistra in hela [`supabase/setup.sql`](supabase/setup.sql) och tryck **Run**.
+3. Vill du ha exempeldata: kör [`supabase/seed.sql`](supabase/seed.sql) på samma sätt.
+4. Gå till **Project Settings → API**. Kopiera *Project URL* och *anon public key* till [`js/config.js`](js/config.js).
+5. Enklast registrering: **Authentication → Sign In / Providers → Email** och stäng av *Confirm email*.
+   (Låter du det vara på får nya användare ett bekräftelsemejl först.)
+6. Har du en databas från en tidigare version? Kör filerna i [`supabase/migrations/`](supabase/migrations) i nummerordning.
+7. Valfritt: aktivera tillägget `pg_cron` under **Database → Extensions** och kör [`supabase/cron.sql`](supabase/cron.sql)
+   så kontrolleras inaktiva admins varje natt.
+
+Anon-nyckeln är tänkt att synas i webbläsaren – vem som får göra vad styrs av reglerna (Row Level Security) i `setup.sql`.
+Gratisnivån pausar projektet efter en vecka utan användning; det startas igen med ett klick i Supabase.
+
+## Publicera
+
+Det är bara statiska filer, så vilken gratis webbhost som helst fungerar: GitHub Pages, Netlify eller Cloudflare Pages.
+Lägg upp hela mappen. I Supabase, lägg till adressen under **Authentication → URL Configuration → Site URL**.
+
+## Hur det fungerar
+
+| Funktion | Regel |
+|---|---|
+| Grupper | Alla kan gå med. Den som skapar en grupp blir admin och kan utse fler admins och ta bort medlemmar. |
+| Höjdpunkter | Alla medlemmar kan skapa och redigera gruppens höjdpunkter. |
+| Inlägg | Bara medlemmar kan posta i en grupp. Inlägg utan grupp går att göra men användaren knuffas mot grupper. Den som postat kan alltid redigera/ta bort; andra kan *be om* ändring eller borttagning (blir ett meddelande). Gruppadmins kan ta bort inlägg i sin grupp. |
+| Aktivitet | Nytt inlägg eller ny kommentar flyttar gruppen först i raden högst upp. |
+| Gemensamma resurser | Kryssruta vid uppladdning. Kategorierna *Finansiering, Lokaler, Metoder* finns från början; nya kan skapas vid uppladdning. |
+| Finansiering | Totalbelopp, *en mottagare* eller *delbelopp*, slutdatum (kan stängas manuellt). Man söker alltid för en grupp man är med i; ansökan visas som gruppens kommentar ("via" personen) med märket **Ansökt**, belopp och swishnummer (bankkonto över 5 000 kr). Utbetalningsuppgiften syns bara för sökande och givare. **Bevilja** → märket blir **Beviljad** och en rad dyker upp i *Att göra* (✓-ikonen uppe till höger). Bockas den av blir märket **Utbetald** och förloppsmätaren fylls. |
+| Admin saknas | Lämnar sista admin blir den som varit med längst admin direkt. Har ingen admin loggat in på ett år läggs ett mejl till admins i tabellen `email_outbox`; efter 30 dagar utan reaktion tar den medlem som varit med längst över. |
+| Kommentarer | Kan besvaras i trådar, som på Reddit. Den man svarar får en notis. |
+| Meddelanden | Medvetet enkla, som tidigt internet. Ingen realtid – sidan hämtar nytt när man öppnar den. |
+
+### Kvar att göra
+- **Skicka mejlen** i `email_outbox`. Kräver en e-posttjänst (t.ex. Resend, gratisnivå) och en liten Supabase Edge Function som läser tabellen.
+- Fler språk: all text ligger direkt i vyerna; nästa steg är att flytta ut den till en översättningsfil.
+
+## Filer
+
+```
+index.html            startsida
+css/app.css           all stil (ljust och mörkt läge)
+js/config.js          appnamn + Supabase-nycklar
+js/app.js             router och bottenmeny
+js/views/*.js         skärmarna (flöde, grupper, personer, notiser/meddelanden)
+js/ui.js              delade komponenter (inläggskort, karusell, finansieringsruta …)
+js/api/supabase.js    riktig backend
+js/api/local.js       demoläge i webbläsaren (samma funktioner)
+js/seed.js            exempeldata (bilderna kommer från Unsplash, fri licens)
+supabase/setup.sql    tabeller, regler och funktioner
+supabase/seed.sql     exempeldata (skapas med: node tools/build-seed-sql.mjs)
+supabase/reset.sql    tar bort allt (även data) så att setup.sql kan köras om
+```

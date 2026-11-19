@@ -1,0 +1,74 @@
+// Startpunkt: enkel hash-router (#/sökväg) + bottenmenyn.
+import { html, render, useState, useEffect } from './lib.js';
+import { api } from './api/index.js';
+import { useStore, refreshMe, refreshBadges, toast } from './store.js';
+import { Icon, Avatar, Count } from './ui.js';
+import { Home, PostView, Compose } from './views/feed.js';
+import { GroupView, GroupSettings, NewGroup, Welcome } from './views/groups.js';
+import { AuthView, Search, Profile, EditProfile, NewPassword } from './views/people.js';
+import { Notifications, Todos, Inbox, Thread, NewMessage } from './views/inbox.js';
+
+function parse() {
+  let h = location.hash.slice(1);
+  // Länkar från inloggningsmejl (#access_token=…, #error=…) är inga sidor i appen.
+  if (/(^|&)(access_token|error|error_description)=/.test(h)) h = '/';
+  const [path, qs] = (h || '/').split('?');
+  return { path, parts: path.split('/').filter(Boolean), query: new URLSearchParams(qs || '') };
+}
+
+function route({ parts: [a, b, c], query }) {
+  switch (a) {
+    case undefined: return html`<${Home} />`;
+    case 'sok': return html`<${Search} tab=${query.get('flik')} />`;
+    case 'ny': return html`<${Compose} groupId=${query.get('grupp')} type=${query.get('typ')} />`;
+    case 'notiser': return html`<${Notifications} />`;
+    case 'profil': return html`<${Profile} id=${b} />`;
+    case 'redigera-profil': return html`<${EditProfile} />`;
+    case 'grupp': return c === 'installningar' ? html`<${GroupSettings} id=${b} />` : html`<${GroupView} id=${b} />`;
+    case 'ny-grupp': return html`<${NewGroup} next=${query.get('next')} />`;
+    case 'valkommen': return html`<${Welcome} />`;
+    case 'post': return c === 'redigera' ? html`<${Compose} editId=${b} />` : html`<${PostView} id=${b} />`;
+    case 'meddelanden': return b === 'ny' ? html`<${NewMessage} />` : b ? html`<${Thread} userId=${b} />` : html`<${Inbox} />`;
+    case 'att-gora': return html`<${Todos} />`;
+    default: return html`<p class="empty">Sidan finns inte. <a href="#/">Till flödet</a></p>`;
+  }
+}
+
+function BottomNav({ r }) {
+  const s = useStore();
+  const [a, b] = r.parts;
+  const item = (href, label, on, icon, n) => html`<a href=${href} aria-label=${label} class=${on ? 'on' : ''}>${icon}<${Count} n=${n} /></a>`;
+  return html`<nav class="bottomnav">
+    ${item('#/', 'Hem', !a, html`<${Icon} name="home" size=${26} />`)}
+    ${item('#/sok', 'Sök', a === 'sok', html`<${Icon} name="search" size=${26} />`)}
+    ${item('#/ny', 'Nytt inlägg', a === 'ny', html`<${Icon} name="plus" size=${26} />`)}
+    ${item('#/notiser', 'Notiser', a === 'notiser', html`<${Icon} name="heart" size=${26} />`, s.badges.notifications)}
+    ${item('#/profil/' + s.me.id, 'Min profil', a === 'profil' && b === s.me.id, html`<span class="nav-avatar"><${Avatar} src=${s.me.avatar_url} name=${s.me.name} size=${26} /></span>`)}
+  </nav>`;
+}
+
+function App() {
+  const s = useStore();
+  const [r, setR] = useState(parse());
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const onHash = () => { setR(parse()); window.scrollTo(0, 0); refreshBadges(); };
+    const linkError = new URLSearchParams(location.hash.slice(1)).get('error_description');
+    if (linkError) {
+      toast(/expired|invalid/i.test(linkError) ? 'Länken har gått ut eller redan använts. Be om en ny.' : linkError);
+      history.replaceState(null, '', location.pathname);
+    }
+    addEventListener('hashchange', onHash);
+    refreshMe().catch(console.error).finally(() => setReady(true));
+    const off = api.onAuthChange(() => refreshMe());
+    const t = setInterval(refreshBadges, 30000);
+    return () => { removeEventListener('hashchange', onHash); off(); clearInterval(t); };
+  }, []);
+  if (!ready) return html`<div class="splash">…</div>`;
+  return html`<div class="app">
+    ${s.recovering ? html`<${NewPassword} />` : s.me ? html`<main key=${r.path}>${route(r)}</main><${BottomNav} r=${r} />` : html`<${AuthView} />`}
+    ${s.toast && html`<div class="toast" role="status">${s.toast}</div>`}
+  </div>`;
+}
+
+render(html`<${App} />`, document.getElementById('root'));
