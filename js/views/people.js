@@ -70,6 +70,7 @@ export function AuthView() {
       ? html`<p class="center"><button class="link strong" onClick=${() => switchTo('login')}>Tillbaka till inloggningen</button></p>`
       : html`<p class="center">${signup ? 'Har du redan ett konto? ' : 'Ny här? '}
           <button class="link strong" onClick=${() => switchTo(signup ? 'login' : 'signup')}>${signup ? 'Logga in' : 'Skapa konto'}</button></p>`}
+    <p class="hint center"><a href="integritet.html">Integritet</a></p>
     ${api.mode === 'demo' && html`<p class="hint center">Demoläge: konton och inlägg sparas bara i den här webbläsaren.</p>`}
   </div>`;
 }
