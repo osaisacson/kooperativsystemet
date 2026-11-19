@@ -64,7 +64,7 @@ main { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px); 
 .topbar-side.right { justify-content: flex-end; }
 .topbar.brand { padding: 0 8px 0 16px; border-bottom: 0; }
 .logo { flex: 1; font-size: 24px; font-weight: 700; letter-spacing: -.02em; color: var(--accent); }
-.logo.big { font-size: 30px; text-align: center; margin-bottom: 8px; }
+.logo.big { font-size: 17px; text-align: center; margin-bottom: 8px; }
 .iconbtn { position: relative; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; }
 .iconbtn:hover { background: var(--bg-soft); }
 .icon { display: block; }
@@ -358,7 +358,8 @@ fieldset.types legend { padding: 0; margin: 0 0 8px; }
 .install-hint { display: flex; align-items: center; gap: 12px; margin: 0 16px 10px; padding: 10px 6px 10px 12px; border-radius: 12px;
   background: var(--accent-soft); font-size: 13px; line-height: 1.4; }
 .install-hint img { border-radius: 10px; flex: none; }
-.install-hint span { flex: 1; }
+.install-hint span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.intro { margin: 4px 16px 12px; font-size: 14px; line-height: 1.45; }
 .member-label { font-size: 13px; font-weight: 600; color: var(--muted); padding: 0 6px; white-space: nowrap; }
 
 /* iPhone zoomar in när man trycker i ett fält med text mindre än 16px – och en sparad app behåller zoomen.

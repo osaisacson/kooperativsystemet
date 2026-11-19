@@ -1,4 +1,4 @@
-// Notiser, att göra-listan och meddelanden (enkla, utan lästkvitton eller andra beroendeskapande finesser).
+// Notiser, checklistan och meddelanden (enkla, utan lästkvitton eller andra beroendeskapande finesser).
 import { html, useState, useEffect, useRef } from '../lib.js';
 import { api } from '../api/index.js';
 import { useStore, useAsync, go, goBack, attempt, refreshBadges } from '../store.js';
@@ -44,9 +44,10 @@ export function Todos() {
     </label>`;
   };
   return html`<div class="page">
-    <${Header} title="Att göra" back />
+    <${Header} title="Checklista" back />
+    <p class="intro muted">Här hamnar det du behöver göra för finansiering du har lagt upp: ansökningar att bevilja eller avslå, och pengar att betala ut. Bocka av när du har betalat.</p>
     ${t.loading && !t.data ? html`<${Loading} />` : t.error ? html`<${ErrorBox} error=${t.error} />` : html`
-      ${!decide.length && !open.length && html`<p class="empty">Inget att göra just nu.</p>`}
+      ${!decide.length && !open.length && html`<p class="empty">Checklistan är tom just nu.</p>`}
       ${decide.length > 0 && html`<div class="label pad-x">Ansökningar att besluta om</div>
         <div class="list">${decide.map((x) => html`<a class="todo" key=${x.id} href=${'#/post/' + x.post.id}>
           <span class="todo-dot" aria-hidden="true"></span>
@@ -89,8 +90,9 @@ export function Thread({ userId }) {
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const end = useRef();
-  useEffect(() => { if (t.data) { refreshBadges(); end.current?.scrollIntoView({ block: 'end' }); } }, [t.data]);
-  useEffect(() => { const i = setInterval(t.reload, 15000); return () => clearInterval(i); }, [userId]); // hämtar nya meddelanden då och då
+  const count = t.data?.length;
+  useEffect(() => { if (count != null) { refreshBadges(); end.current?.scrollIntoView({ block: 'end' }); } }, [count]);   // bara när det kommit något nytt
+  useEffect(() => { const i = setInterval(() => { if (!document.hidden) t.reload(); }, 15000); return () => clearInterval(i); }, [userId]); // hämtar nya meddelanden då och då
   async function send(e) {
     e?.preventDefault();
     if (!body.trim() || busy) return;

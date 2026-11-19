@@ -75,7 +75,7 @@ export function GroupView({ id }) {
       ${member && html`<button class="mini" onClick=${() => setHl({ highlight: { title: '', post_ids: [] }, edit: true })}>
         <span class="hl-cover new">+</span><span>Ny</span></button>`}
       ${grp.highlights.map((h) => html`<button class="mini" key=${h.id} onClick=${() => setHl({ highlight: h, edit: false })}>
-        <span class="hl-cover">${cover(h) ? html`<img src=${cover(h)} alt="" />` : h.title[0]}</span><span>${h.title}</span></button>`)}
+        <span class="hl-cover">${cover(h) ? html`<img src=${cover(h)} alt="" loading="lazy" decoding="async" />` : h.title[0]}</span><span>${h.title}</span></button>`)}
     </div>`}
 
     <div class="grid-sep"></div>
@@ -108,7 +108,7 @@ function HighlightEditor({ groupId, highlight, posts, onClose, onSaved }) {
       <div class="label small">Välj inlägg (${ids.length} valda)</div>
       ${posts.length === 0 ? html`<p class="muted">Gruppen har inga inlägg än.</p>` : html`<div class="grid pick">
         ${posts.map((p) => html`<button type="button" key=${p.id} class=${'tile' + (ids.includes(p.id) ? ' picked' : '')} onClick=${() => toggle(p.id)}>
-          ${p.slides[0] ? html`<img src=${p.slides[0].image_url} alt="" />` : html`<span class="tile-text">${p.caption}</span>`}
+          ${p.slides[0] ? html`<img src=${p.slides[0].image_url} alt="" loading="lazy" decoding="async" />` : html`<span class="tile-text">${p.caption}</span>`}
           ${ids.includes(p.id) && html`<span class="tick">${ids.indexOf(p.id) + 1}</span>`}</button>`)}</div>`}
       <button class="btn primary block">Spara</button>
       ${highlight.id && html`<button type="button" class="link danger center" onClick=${del}>Ta bort höjdpunkten</button>`}

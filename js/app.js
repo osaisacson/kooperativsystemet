@@ -83,8 +83,10 @@ function App() {
     addEventListener('hashchange', onHash);
     refreshMe().catch(console.error).finally(() => setReady(true));
     const off = api.onAuthChange(() => refreshMe());
-    const t = setInterval(refreshBadges, 30000);
-    return () => { removeEventListener('hashchange', onHash); off(); clearInterval(t); };
+    const t = setInterval(() => { if (!document.hidden) refreshBadges(); }, 60000);
+    const onVisible = () => { if (!document.hidden) refreshBadges(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { removeEventListener('hashchange', onHash); off(); clearInterval(t); document.removeEventListener('visibilitychange', onVisible); };
   }, []);
   if (!ready) return html`<div class="splash">…</div>`;
   return html`<div class="app">

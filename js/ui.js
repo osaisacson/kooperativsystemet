@@ -32,7 +32,7 @@ function hue(s = '') { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(
 export function Avatar({ src, name = '', size = 32 }) {
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   const style = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px;${src ? '' : `background:hsl(${hue(name)} 38% 52%)`}`;
-  return html`<span class="avatar" style=${style}>${src ? html`<img src=${src} alt="" />` : initials}</span>`;
+  return html`<span class="avatar" style=${style}>${src ? html`<img src=${src} alt="" loading="lazy" decoding="async" />` : initials}</span>`;
 }
 
 export const Count = ({ n }) => (n > 0 ? html`<span class="count">${n > 99 ? '99+' : n}</span>` : null);
@@ -49,12 +49,13 @@ export function Header({ title, back = false, right = null }) {
 export const Loading = () => html`<p class="empty">Laddar…</p>`;
 export const ErrorBox = ({ error }) => html`<p class="empty error">${error?.message || 'Något gick fel.'}</p>`;
 
+let openModals = 0;
 export function Modal({ title, onClose, children }) {
   useEffect(() => {
     const k = (e) => e.key === 'Escape' && onClose();
     addEventListener('keydown', k);
-    document.body.classList.add('locked');
-    return () => { removeEventListener('keydown', k); document.body.classList.remove('locked'); };
+    openModals++; document.body.classList.add('locked');
+    return () => { removeEventListener('keydown', k); openModals = Math.max(0, openModals - 1); if (!openModals) document.body.classList.remove('locked'); };
   }, []);
   return html`<div class="modal-bg" onClick=${(e) => e.target === e.currentTarget && onClose()}>
     <div class="modal" role="dialog" aria-modal="true" aria-label=${title}>
@@ -79,7 +80,7 @@ export function Carousel({ slides, badge = null }) {
   return html`<div class="carousel">
     <div class="frame">
       <div class="track" ref=${ref} onScroll=${onScroll}>
-        ${slides.map((s) => html`<div class="slide"><img src=${s.image_url} alt=${s.text || ''} loading="lazy" /></div>`)}
+        ${slides.map((s) => html`<div class="slide"><img src=${s.image_url} alt=${s.text || ''} loading="lazy" decoding="async" /></div>`)}
       </div>
       ${(badge || slides.length > 1) && html`<div class="corner">
         ${badge && html`<span class="img-badge">${badge}</span>`}
@@ -290,6 +291,7 @@ export function EventBox({ post: p }) {
     a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
     a.download = eventTitle(p).replace(/[^\wåäöÅÄÖ -]/g, '').trim().slice(0, 40) + '.ics';
     a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   }
   const where = [p.event_address, p.event_address?.includes(p.event_city || '§') ? null : p.event_city].filter(Boolean).join(', ');
   return html`<div class=${'event' + (past ? ' past' : '')}>
@@ -381,7 +383,7 @@ function CommentNode({ c, post, children, depth, onChange }) {
   const kids = children[c.id] || [];
   const countAll = (id) => (children[id] || []).reduce((n, k) => n + 1 + countAll(k.id), 0);
   async function decide(d) {
-    const msg = d === 'granted' ? 'Beviljad – den finns nu i din att göra-lista' : 'Ansökan avslogs';
+    const msg = d === 'granted' ? 'Beviljad – den finns nu i din checklista' : 'Ansökan avslogs';
     if (await attempt(() => api.decideApplication(c.id, d), msg)) { refreshBadges(); onChange(); }
   }
   async function withdraw() {
@@ -431,7 +433,7 @@ function CommentNode({ c, post, children, depth, onChange }) {
 export function PostGrid({ posts, showAuthor = false, empty = 'Inga inlägg än.' }) {
   if (!posts.length) return html`<p class="empty">${empty}</p>`;
   return html`<div class="grid">${posts.map((p) => html`<a class="tile" href=${'#/post/' + p.id} key=${p.id}>
-    ${p.slides[0] ? html`<img src=${p.slides[0].image_url} alt="" loading="lazy" />` : html`<span class="tile-text">${p.caption}</span>`}
+    ${p.slides[0] ? html`<img src=${p.slides[0].image_url} alt="" loading="lazy" decoding="async" />` : html`<span class="tile-text">${p.caption}</span>`}
     ${p.slides.length > 1 && html`<span class="tile-icon"><${Icon} name="layers" size=${18} /></span>`}
     ${p.finance && html`<span class="tile-fin">kr</span>`}
     ${showAuthor && html`<span class="tile-author"><${Avatar} src=${p.author.avatar_url} name=${p.author.name} size=${20} /></span>`}

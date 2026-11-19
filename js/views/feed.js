@@ -17,8 +17,8 @@ function InstallHint() {
   return html`<div class="install-hint">
     <img src="icons/icon-192.png" alt="" width="40" height="40" />
     <span><strong>Spara som app</strong><br />${ios
-      ? html`Tryck på <b>Dela</b> <span aria-hidden="true">⬆︎</span> och välj <b>Lägg till på hemskärmen</b>.`
-      : html`Öppna menyn <b>⋮</b> och välj <b>Installera app</b> eller <b>Lägg till på startskärmen</b>.`}</span>
+      ? html`<b>···</b> → <b>Dela</b> → <b>Lägg till på hemskärmen</b>`
+      : html`<b>⋮</b> → <b>Lägg till på startskärmen</b>`}</span>
     <button class="iconbtn" aria-label="Stäng" onClick=${close}><${Icon} name="x" size=${18} /></button>
   </div>`;
 }
@@ -94,7 +94,7 @@ export function Home() {
       <${PlaceSwitcher} groups=${groups.data || []} />
       <a class="iconbtn map-btn" href="#/karta" aria-label="Visa grupperna på kartan" title="Karta"><${Icon} name="map" /></a>
       <div class="topbar-side right">
-        ${s.badges.todos > 0 && html`<a class="iconbtn" href="#/att-gora" aria-label="Att göra med finansiering"><${Icon} name="check" /><${Count} n=${s.badges.todos} /></a>`}
+        ${s.badges.todos > 0 && html`<a class="iconbtn" href="#/att-gora" aria-label="Checklista"><${Icon} name="check" /><${Count} n=${s.badges.todos} /></a>`}
         <a class="iconbtn" href="#/meddelanden" aria-label="Meddelanden"><${Icon} name="chat" /><${Count} n=${s.badges.messages} /></a>
       </div>
     </header>
@@ -190,8 +190,8 @@ function FinanceSteps() {
       <li>Du anger hur mycket pengar som finns, om de går till <em>en mottagare</em> eller kan sökas i <em>delbelopp</em> av flera, och hur länge inlägget ska ligga uppe.</li>
       <li>Den som vill söka trycker på <b>Ansök</b> på inlägget och skriver en motivering. Motiveringen blir en kommentar som alla kan läsa, märkt <span class="badge applied">Ansökt</span>.</li>
       <li>Den sökande anger också belopp och swishnummer – eller bankkonto om beloppet är över ${fmtKr(PAYOUT_BANK_LIMIT)}. Betalningsuppgifterna syns bara för dig och den sökande.</li>
-      <li>Varje ny ansökan hamnar i <em>din</em> att göra-lista (✓ uppe till höger). Du trycker <b>Bevilja</b> eller <b>Avslå</b> direkt under kommentaren.</li>
-      <li>Beviljade ansökningar ligger kvar i din att göra-lista som en utbetalning, t.ex. ”Swisha Maja Ek 2 500 kr till 070-…”.</li>
+      <li>Varje ny ansökan hamnar i <em>din</em> checklista (✓ uppe till höger). Du trycker <b>Bevilja</b> eller <b>Avslå</b> direkt under kommentaren.</li>
+      <li>Beviljade ansökningar ligger kvar i din checklista som en utbetalning, t.ex. ”Swisha Maja Ek 2 500 kr till 070-…”.</li>
       <li>Du betalar själv via Swish eller bank och bockar sedan av raden. Ansökan märks <span class="badge paid">Utbetald</span> och mätaren på inlägget visar hur mycket som finns kvar.</li>
     </ol>
     <small class="muted">Appen hanterar inga pengar – den håller bara ordning på ansökningar och utbetalningar. Du kan stänga finansieringen när som helst via ··· på inlägget.</small>

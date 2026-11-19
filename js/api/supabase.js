@@ -88,7 +88,7 @@ export const api = {
     // Supabase rekommenderar att inte göra egna anrop direkt i den här callbacken.
     const { data } = sb.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') recovering = true;
-      setTimeout(cb, 0);
+      if (['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED', 'PASSWORD_RECOVERY'].includes(event)) setTimeout(cb, 0);
     });
     return () => data.subscription.unsubscribe();
   },
@@ -264,7 +264,7 @@ export const api = {
   },
   async listEvents() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    return ok(await sb.from('posts').select(POST_SELECT).eq('is_event', true).gte('event_start', today.toISOString()).order('event_start')).map(shapePost);
+    return ok(await sb.from('posts').select(POST_SELECT).eq('is_event', true).gte('event_start', today.toISOString()).order('event_start').limit(300)).map(shapePost);
   },
   async toggleMemory(postId) {
     const me = needMe();
