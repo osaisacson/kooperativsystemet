@@ -42,15 +42,17 @@ async function upload(file, max = 1280) {
 }
 
 const PROFILE = 'id,name,avatar_url';
-const POST_SELECT = `*, author:profiles(${PROFILE}), group:groups(id,name,avatar_url,city,region,country), slides:post_slides(id,position,image_url,text), comments(id,applied_amount,status,body,created_at,parent_id,author:profiles(id,name),group:groups(id,name))`;
+const POST_SELECT = `*, author:profiles(${PROFILE}), group:groups(id,name,avatar_url,city,region,country), slides:post_slides(id,position,image_url,text), comments(id,applied_amount,status,body,created_at,parent_id,author:profiles(id,name),group:groups(id,name)), memory_votes(user_id)`;
 
 function shapePost(p) {
   const cs = p.comments || [];
   const { comments, ...rest } = p;
+  const votes = p.memory_votes || [];
   const first = cs.filter((c) => !c.parent_id).sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
   return {
     ...rest, slides: (p.slides || []).sort((a, b) => a.position - b.position), comment_count: cs.length, finance: financeSummary(p, cs),
     first_comment: first ? { body: first.body, author: first.author, group: first.group } : null,
+    memory_count: votes.length, memory_mine: votes.some((v) => v.user_id === meId), memory_votes: undefined,
   };
 }
 const place = ({ country, region, city }) => ({ country: (country || '').trim() || null, region: (region || '').trim() || null, city: (city || '').trim() || null });
@@ -232,6 +234,13 @@ export const api = {
   async deletePost(id) {
     const rows = ok(await sb.from('posts').delete().eq('id', id).select('id'));
     if (!rows.length) throw new Error('Du får inte ta bort det här inlägget.');
+  },
+  async toggleMemory(postId) {
+    const me = needMe();
+    const has = ok(await sb.from('memory_votes').select('post_id').eq('post_id', postId).eq('user_id', me)).length > 0;
+    if (has) ok(await sb.from('memory_votes').delete().eq('post_id', postId).eq('user_id', me));
+    else ok(await sb.from('memory_votes').insert({ post_id: postId, user_id: me }));
+    return !has;
   },
   async setFinanceClosed(id, closed) { ok(await sb.from('posts').update({ fin_closed: !!closed }).eq('id', id)); },
 

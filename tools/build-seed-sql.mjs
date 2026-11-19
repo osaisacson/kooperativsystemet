@@ -27,9 +27,9 @@ sql += SEED.groups.map((g) => `update public.groups set created_by = ${lit(g.cre
 sql += rows('group_members', ['group_id', 'user_id', 'role', 'joined_at'],
   SEED.members.map((m) => [lit(m.g), lit(m.u), lit(m.role || 'member'), ago(m.h)]));
 
-sql += rows('posts', ['id', 'author_id', 'group_id', 'caption', 'kind', 'is_resource', 'categories', 'space_functions', 'space_cost', 'fin_total', 'fin_mode', 'fin_expires_at', 'created_at', 'updated_at', 'last_activity_at'],
+sql += rows('posts', ['id', 'author_id', 'group_id', 'caption', 'kind', 'is_resource', 'categories', 'space_functions', 'space_cost', 'space_price', 'fin_total', 'fin_mode', 'fin_expires_at', 'created_at', 'updated_at', 'last_activity_at'],
   SEED.posts.map((p) => [lit(p.id), lit(p.author_id), lit(p.group_id), lit(p.caption), lit(p.kind || 'vanlig'), lit(!!(p.kind || p.tags?.length)), arr(p.tags, 'text'),
-    arr(p.space_functions, 'text'), lit(p.space_cost ?? null),
+    arr(p.space_functions, 'text'), lit(p.space_cost ?? null), lit(p.space_price ?? null),
     lit(p.fin_total ?? null), lit(p.fin_mode ?? null), p.expires_days != null ? `now() + interval '${p.expires_days} days'` : 'null',
     ago(p.h), ago(p.h), ago(act.posts[p.id])]));
 
@@ -49,6 +49,8 @@ sql += `delete from public.notifications where post_id in (${SEED.posts.map((p) 
 
 sql += rows('highlights', ['id', 'group_id', 'title', 'post_ids', 'created_at'],
   SEED.highlights.map((h) => [lit(h.id), lit(h.group_id), lit(h.title), arr(h.post_ids, 'uuid'), ago(h.h)]));
+
+sql += rows('memory_votes', ['post_id', 'user_id'], SEED.memory.map((m) => [lit(m.post_id), lit(m.user_id)]));
 
 const out = new URL('../supabase/seed.sql', import.meta.url);
 writeFileSync(out, sql);

@@ -82,9 +82,9 @@ export const SEED = {
       slides: [{ img: photo('1660330589243-4c640d878052'), text: '24 paneler, 9,6 kW.' }] },
     { id: P(9), group_id: G(4), author_id: U(4), h: 8,
       caption: 'Någon som har en lång stege att låna ut i helgen? Ska rensa hängrännor.', slides: [] },
-    { id: P(10), group_id: G(4), author_id: U(2), h: 40, kind: 'lokal', space_functions: ['Förråd', 'Kyl och frys'], space_cost: 'gentjanst',
-      caption: 'Vi har en frysbox i källaren på Lantmannagatan 8 som kan användas för gemensamma storinköp. Plats för ungefär tio familjers ransoner.',
-      slides: [{ img: photo('1606859191214-25806e8e2423'), text: 'Plats för storinköp, sorterat per familj.' }] },
+    { id: P(10), group_id: G(3), author_id: U(6), h: 40, kind: 'lokal', space_functions: ['Verkstad', 'Ateljé'], space_cost: 'kostar', space_price: 'Se deras hemsida',
+      caption: 'Tips för alla i Göteborg: Mikrofabriken är en delad verkstad där man kan använda maskiner och verktyg man inte har själv. Bra ställe att bygga prototyper eller laga saker tillsammans. Kolla deras hemsida för öppettider och vad det kostar.',
+      slides: [{ img: photo('1759523146335-0069847ceb16'), text: 'Delade maskiner och arbetsbänkar.' }] },
   ],
 
   comments: [
@@ -111,6 +111,15 @@ export const SEED = {
     { id: H(2), group_id: G(2), title: 'Bidrag', post_ids: [P(2)], h: 29 },
     { id: H(3), group_id: G(2), title: 'Bygget', post_ids: [P(8)], h: 60 },
     { id: H(4), group_id: G(5), title: 'Recept', post_ids: [P(5)], h: 49 },
+  ],
+
+  // Vem som vill spara vilka inlägg i långtidsminnet.
+  memory: [
+    { post_id: P(1), user_id: U(2) }, { post_id: P(1), user_id: U(3) }, { post_id: P(1), user_id: U(4) }, { post_id: P(1), user_id: U(6) },
+    { post_id: P(5), user_id: U(1) }, { post_id: P(5), user_id: U(4) },
+    { post_id: P(3), user_id: U(2) }, { post_id: P(3), user_id: U(6) }, { post_id: P(3), user_id: U(1) },
+    { post_id: P(4), user_id: U(1) },
+    { post_id: P(8), user_id: U(1) }, { post_id: P(8), user_id: U(3) },
   ],
 };
 
@@ -152,6 +161,7 @@ export function materializeSeed() {
       decided_at: c.status && c.status !== 'applied' ? iso(c.h - 1) : null,
       paid_at: c.status === 'paid' ? iso(c.h - 2) : null,
     })),
+    memory: SEED.memory.map((m) => ({ ...m, created_at: iso(1) })),
     payouts: Object.fromEntries(SEED.comments.filter((c) => c.payout).map((c) => [c.id, c.payout])),
   };
 }

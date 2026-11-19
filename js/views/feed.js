@@ -50,7 +50,7 @@ function PlaceSwitcher({ groups }) {
     <span>${placeLabel(o)}</span>${o.level !== 'world' && html`<small class="muted">${PLACE_LEVELS[o.level]}</small>`}</button>`;
   return html`<button class="place-btn" onClick=${() => setOpen(true)} aria-label=${`Visar ${placeLabel(place)}. Byt plats`}>
       <span class="place-name">${placeLabel(place)}<span class="chev" aria-hidden="true">▾</span></span>
-      <small class="place-hint">${place.level === 'world' ? 'välj stad, region eller land' : `visar ${PLACE_LEVELS[place.level]} · byt till region eller land`}</small>
+      ${place.level !== 'world' && html`<small class="place-hint">visar ${PLACE_LEVELS[place.level]} · byt till region eller land</small>`}
     </button>
     ${open && html`<${Sheet} onClose=${() => setOpen(false)}>
       ${options.map(row)}
@@ -58,13 +58,15 @@ function PlaceSwitcher({ groups }) {
     <//>`}`;
 }
 
-const TABS = [['flode', 'Flöde'], ['finansiering', 'Finansiering'], ['lokal', 'Lokaler']];
+const TABS = [['flode', 'Flöde'], ['finansiering', 'Finansiering'], ['lokal', 'Lokaler'], ['minne', 'Minne']];
 
 export function Home() {
   const s = useStore();
   const [tab, setTab] = useState(() => { try { return sessionStorage.getItem('tab') || 'flode'; } catch { return 'flode'; } });
-  const [fn, setFn] = useState(null);
-  const [cost, setCost] = useState(null);
+  const [fn, setFn] = useState('');        // Lokaler: användningsområde (fritext)
+  const [cost, setCost] = useState('');    // Lokaler: kostnad (fritext)
+  const [memQ, setMemQ] = useState('');    // Minne: sökfält för ämnen
+  const [memTags, setMemTags] = useState([]);
   const groups = useAsync(() => api.listGroups(), []);
   const posts = useAsync(() => api.listPosts({ feed: true }), []);
   const place = s.place || { level: 'world' };
@@ -76,8 +78,14 @@ export function Home() {
   const spaces = here.filter((p) => postType(p) === 'lokal');
   const available = finance.reduce((sum, p) => sum + (p.finance?.open ? p.finance.remaining : 0), 0);
   const functions = [...new Set(spaces.flatMap((p) => p.space_functions || []))].sort((a, b) => a.localeCompare(b, 'sv'));
+  const has = (text, needle) => text.toLowerCase().includes(needle.trim().toLowerCase());
+  const costText = (p) => `${SPACE_COSTS[p.space_cost] || ''} ${p.space_price || ''}`;
+  const memory = here.filter((p) => p.memory_count > 0).sort((a, b) => b.memory_count - a.memory_count || b.created_at.localeCompare(a.created_at));
+  const memoryTags = [...new Set(memory.flatMap((p) => p.categories || []))].sort((a, b) => a.localeCompare(b, 'sv'));
+  const tagHits = memQ.trim() ? memoryTags.filter((t) => has(t, memQ) && !memTags.includes(t)) : [];
   const shown = tab === 'finansiering' ? finance
-    : tab === 'lokal' ? spaces.filter((p) => (!fn || p.space_functions?.includes(fn)) && (!cost || p.space_cost === cost))
+    : tab === 'lokal' ? spaces.filter((p) => (!fn.trim() || (p.space_functions || []).some((f) => has(f, fn))) && (!cost.trim() || has(costText(p), cost)))
+    : tab === 'minne' ? memory.filter((p) => memTags.every((t) => p.categories?.includes(t)) && (!memQ.trim() || (p.categories || []).some((c) => has(c, memQ)) || has(p.caption, memQ)))
     : here;
   const localGroups = (groups.data || []).filter((g) => inPlace(g, place));
   const where = placeLabel(place);
@@ -110,20 +118,29 @@ export function Home() {
       <div class="tab-info">
         ${tab === 'flode' && html`<span class="muted small">Allt från grupperna i ${where}</span>`}
         ${tab === 'finansiering' && html`<span class="small"><strong>${fmtKr(available)}</strong> <span class="muted">går att söka i ${where} just nu</span></span>`}
-        ${tab === 'lokal' && html`<div class="chips tight">
-            <button class=${'chip' + (!fn ? ' on' : '')} onClick=${() => setFn(null)}>Alla</button>
-            ${functions.map((f) => html`<button class=${'chip' + (fn === f ? ' on' : '')} onClick=${() => setFn(fn === f ? null : f)}>${f}</button>`)}
-          </div>`}
+        ${tab === 'lokal' && html`<span class="muted small">Lokaler att låna, använda mot en gentjänst eller hyra i ${where}</span>`}
+        ${tab === 'minne' && html`<span class="muted small">Inlägg som är värda att minnas, för att andra kan ha nytta av dem. Tryck på <${Icon} name="memory" size=${13} /> längst ner till höger i ett inlägg för att spara det här.</span>`}
       </div>
-      <a class="chip-add" href=${'#/ny?typ=' + (tab === 'flode' ? 'vanlig' : tab)} aria-label=${{ flode: 'Nytt inlägg', finansiering: 'Ny finansiering', lokal: 'Ny lokal' }[tab]}>${PLUS}</a>
+      ${tab !== 'minne' && html`<a class="chip-add" href=${'#/ny?typ=' + (tab === 'flode' ? 'vanlig' : tab)} aria-label=${{ flode: 'Nytt inlägg', finansiering: 'Ny finansiering', lokal: 'Ny lokal' }[tab]}>${PLUS}</a>`}
     </div>
-    ${tab === 'lokal' && html`<div class="chips tight cost-filter">
-      <button class=${'chip small' + (!cost ? ' on' : '')} onClick=${() => setCost(null)}>Alla kostnader</button>
-      ${Object.entries(SPACE_COSTS).map(([k, label]) => html`<button class=${'chip small' + (cost === k ? ' on' : '')} onClick=${() => setCost(cost === k ? null : k)}>${label}</button>`)}
+    ${tab === 'lokal' && html`<div class="space-filters">
+      <label><input list="dl-fn" value=${fn} onInput=${(e) => setFn(e.target.value)} placeholder="Användningsområde" aria-label="Filtrera på användningsområde" />
+        ${fn && html`<button class="clear" aria-label="Rensa" onClick=${() => setFn('')}>×</button>`}
+        <datalist id="dl-fn">${functions.map((f) => html`<option value=${f} />`)}</datalist></label>
+      <label><input list="dl-cost" value=${cost} onInput=${(e) => setCost(e.target.value)} placeholder="Kostnad" aria-label="Filtrera på kostnad" />
+        ${cost && html`<button class="clear" aria-label="Rensa" onClick=${() => setCost('')}>×</button>`}
+        <datalist id="dl-cost">${Object.values(SPACE_COSTS).map((c) => html`<option value=${c} />`)}</datalist></label>
+    </div>`}
+    ${tab === 'minne' && html`<div class="memory-search">
+      <input type="search" value=${memQ} onInput=${(e) => setMemQ(e.target.value)} placeholder="Sök på ämne, t.ex. energi" aria-label="Sök på ämne" />
+      ${(memTags.length > 0 || tagHits.length > 0) && html`<div class="chips wrap">
+        ${memTags.map((t) => html`<button class="chip on" onClick=${() => setMemTags(memTags.filter((x) => x !== t))}>#${t.toLowerCase()} ×</button>`)}
+        ${tagHits.map((t) => html`<button class="chip" onClick=${() => { setMemTags([...memTags, t]); setMemQ(''); }}>#${t.toLowerCase()}</button>`)}
+      </div>`}
     </div>`}
 
     ${posts.loading && !posts.data ? html`<${Loading} />` : posts.error ? html`<${ErrorBox} error=${posts.error} />`
-      : shown.length === 0 ? html`<p class="empty">${{ flode: 'Inga inlägg', finansiering: 'Ingen finansiering att söka', lokal: 'Inga lokaler' }[tab]} i ${where} än.
+      : shown.length === 0 ? html`<p class="empty">${{ flode: 'Inga inlägg', finansiering: 'Ingen finansiering att söka', lokal: 'Inga lokaler', minne: 'Inget sparat i långtidsminnet' }[tab]} i ${where}${(fn || cost || memTags.length || memQ) ? ' som matchar' : ' än'}.
           ${place.level !== 'world' && html`<br /><span class="small">Tryck på <b>${where}</b> högst upp för att se region, land eller hela världen.</span>`}</p>`
       : shown.map((p) => html`<${PostCard} key=${p.id} post=${p} onChange=${posts.reload} />`)}
   </div>`;

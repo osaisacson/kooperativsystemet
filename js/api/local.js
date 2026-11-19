@@ -3,7 +3,7 @@
 import { materializeSeed } from '../seed.js';
 import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, sortCategories, resizeImage, blobToDataURL } from '../util.js';
 
-const KEY = 'kooperativsystemet-demo-v3';
+const KEY = 'kooperativsystemet-demo-v4';
 const subs = new Set();
 const fresh = () => ({ ...materializeSeed(), credentials: {}, session: null, notifications: [], messages: [] });
 
@@ -44,6 +44,8 @@ function shapePost(p) {
     ...p, slides: [...p.slides].sort((a, b) => a.position - b.position),
     author: profileOf(p.author_id), group: groupOf(p.group_id),
     comment_count: cs.length, finance: financeSummary(p, cs), first_comment: firstComment(cs),
+    memory_count: (db.memory || []).filter((m) => m.post_id === p.id).length,
+    memory_mine: (db.memory || []).some((m) => m.post_id === p.id && m.user_id === db.session),
   });
 }
 function firstComment(cs) {
@@ -295,8 +297,17 @@ export const api = {
     db.comments = db.comments.filter((c) => !cids.has(c.id));
     for (const cid of cids) delete db.payouts[cid];
     db.notifications = db.notifications.filter((n) => n.post_id !== id);
+    db.memory = (db.memory || []).filter((m) => m.post_id !== id);
     for (const h of db.highlights) h.post_ids = h.post_ids.filter((x) => x !== id);
     persist();
+  },
+  async toggleMemory(postId) {
+    const me = needMe();
+    db.memory ||= [];
+    const has = db.memory.some((m) => m.post_id === postId && m.user_id === me);
+    db.memory = has ? db.memory.filter((m) => !(m.post_id === postId && m.user_id === me)) : [...db.memory, { post_id: postId, user_id: me, created_at: now() }];
+    persist();
+    return !has;
   },
   async setFinanceClosed(id, closed) {
     const p = db.posts.find((x) => x.id === id);

@@ -16,6 +16,7 @@ const ICONS = {
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/>',
+  memory: '<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.5L5 21V4a1 1 0 0 1 1-1z"/>',
   bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   layers: '<rect x="8" y="3" width="13" height="13" rx="2"/><path d="M16 21H5a2 2 0 0 1-2-2V8"/>',
@@ -207,6 +208,26 @@ export function PostMenu({ post, onChange }) {
   </span>`;
 }
 
+// Spara i långtidsminnet: en röst per person, går att ta tillbaka.
+function MemoryButton({ post, onChange }) {
+  const [mine, setMine] = useState(!!post.memory_mine);
+  const [count, setCount] = useState(post.memory_count || 0);
+  const [busy, setBusy] = useState(false);
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    const next = !mine;
+    setMine(next); setCount((c) => c + (next ? 1 : -1));   // visa direkt
+    const res = await attempt(async () => { await api.toggleMemory(post.id); return true; }, next ? 'Sparat i långtidsminnet' : 'Borttaget ur långtidsminnet');
+    if (res === false) { setMine(!next); setCount((c) => c + (next ? -1 : 1)); }
+    setBusy(false);
+    onChange?.();
+  }
+  return html`<button class=${'action memory' + (mine ? ' on' : '')} onClick=${toggle} aria-pressed=${mine}
+    aria-label=${mine ? 'Ta bort din röst för långtidsminnet' : 'Spara i långtidsminnet'} title="Spara i långtidsminnet">
+    <span>${count}</span><${Icon} name="memory" size=${22} /></button>`;
+}
+
 export function PostCard({ post: p, onChange, full = false }) {
   const [applying, setApplying] = useState(false);
   const edited = new Date(p.updated_at) - new Date(p.created_at) > 60e3;
@@ -231,7 +252,10 @@ export function PostCard({ post: p, onChange, full = false }) {
         <span class="space-cost">${SPACE_COSTS[p.space_cost] || ''}${p.space_cost === 'kostar' && p.space_price ? `: ${p.space_price}` : ''}</span></p>`}
       ${kind === 'vanlig' && p.categories?.length > 0 && html`<p class="topics">${p.categories.map((c) => html`<span>#${c.toLowerCase()}</span>`)}</p>`}
       ${p.finance && html`<${FinanceBox} post=${p} onApply=${() => setApplying(true)} />`}
-      <a class="action" href=${'#/post/' + p.id} aria-label=${`${p.comment_count} kommentarer`}><${Icon} name="chat" size=${22} /><span>${p.comment_count}</span></a>
+      <div class="post-actions">
+        <a class="action" href=${'#/post/' + p.id} aria-label=${`${p.comment_count} kommentarer`}><${Icon} name="chat" size=${22} /><span>${p.comment_count}</span></a>
+        <${MemoryButton} post=${p} onChange=${onChange} />
+      </div>
       ${!full && p.first_comment && html`<a class="first-comment" href=${'#/post/' + p.id}><strong>${p.first_comment.group?.name || p.first_comment.author.name}</strong> ${p.first_comment.body}</a>`}
       <div class="time">${timeAgo(p.created_at)}${edited ? ' · redigerad' : ''}</div>
     </div>

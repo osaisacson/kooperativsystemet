@@ -445,6 +445,18 @@ create policy "egna meddelanden" on public.messages for select to authenticated 
 create policy "skicka meddelanden" on public.messages for insert to authenticated with check (from_id = auth.uid() and to_id <> auth.uid());
 create policy "markera meddelanden lästa" on public.messages for update to authenticated using (to_id = auth.uid());
 
+-- Långtidsminnet: vem som vill spara vilket inlägg.
+create table public.memory_votes (
+  post_id uuid not null references public.posts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (post_id, user_id)
+);
+alter table public.memory_votes enable row level security;
+create policy "minnesröster syns" on public.memory_votes for select to authenticated using (true);
+create policy "rösta själv" on public.memory_votes for insert to authenticated with check (user_id = auth.uid());
+create policy "ta tillbaka egen röst" on public.memory_votes for delete to authenticated using (user_id = auth.uid());
+
 -- ---------- Bildlagring ------------------------------------------------
 
 insert into storage.buckets (id, name, public) values ('media', 'media', true) on conflict (id) do nothing;
