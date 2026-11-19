@@ -1,7 +1,7 @@
 // Riktig backend: Supabase (Postgres + inloggning + bildlagring). Se supabase/setup.sql för tabeller och regler.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js';
-import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, sortCategories, resizeImage } from '../util.js';
+import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, geocode, sortCategories, resizeImage } from '../util.js';
 
 // Kommer man hit via länken i ett "återställ lösenord"-mejl står det type=recovery i adressen.
 // Läses av innan Supabase hinner ta bort det.
@@ -56,6 +56,12 @@ function shapePost(p) {
   };
 }
 const place = ({ country, region, city }) => ({ country: (country || '').trim() || null, region: (region || '').trim() || null, city: (city || '').trim() || null });
+// Plats + adress + kartposition (slås upp automatiskt).
+async function located({ country, region, city, address }) {
+  const p = { ...place({ country, region, city }), address: (address || '').trim() || null };
+  const pos = await geocode(p);
+  return { ...p, lat: pos?.lat ?? null, lng: pos?.lng ?? null };
+}
 async function ensureCategories(cats) {
   if (cats.length) ok(await sb.from('categories').upsert(cats.map((name) => ({ name })), { onConflict: 'name', ignoreDuplicates: true }));
 }
@@ -153,18 +159,18 @@ export const api = {
       highlights: highlights.sort((a, b) => a.created_at.localeCompare(b.created_at)),
     };
   },
-  async createGroup({ name, description, homepage, country, region, city, avatarFile }) {
+  async createGroup({ name, description, homepage, country, region, city, address, avatarFile }) {
     if (!name?.trim()) throw new Error('Ge gruppen ett namn.');
     const url = normalizeUrl(homepage);
     const avatar_url = avatarFile ? await upload(avatarFile, 400) : null;
-    return ok(await sb.from('groups').insert({ name: name.trim(), description: (description || '').trim(), homepage: url, ...place({ country, region, city }), avatar_url, created_by: needMe() }).select().single());
+    return ok(await sb.from('groups').insert({ name: name.trim(), description: (description || '').trim(), homepage: url, ...(await located({ country, region, city, address })), avatar_url, created_by: needMe() }).select().single());
   },
-  async updateGroup(id, { name, description, homepage, country, region, city, avatarFile }) {
+  async updateGroup(id, { name, description, homepage, country, region, city, address, avatarFile }) {
     const patch = {};
     if (name?.trim()) patch.name = name.trim();
     if (description !== undefined) patch.description = description.trim();
     if (homepage !== undefined) patch.homepage = normalizeUrl(homepage);
-    if (country !== undefined) Object.assign(patch, place({ country, region, city }));
+    if (country !== undefined) Object.assign(patch, await located({ country, region, city, address }));
     if (avatarFile) patch.avatar_url = await upload(avatarFile, 400);
     ok(await sb.from('groups').update(patch).eq('id', id));
   },

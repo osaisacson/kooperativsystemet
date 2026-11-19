@@ -1,9 +1,9 @@
 // Demoläge: samma funktioner som supabase.js men allt sparas i webbläsarens localStorage.
 // Reglerna här speglar reglerna i supabase/setup.sql.
 import { materializeSeed } from '../seed.js';
-import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, sortCategories, resizeImage, blobToDataURL } from '../util.js';
+import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, geocode, sortCategories, resizeImage, blobToDataURL } from '../util.js';
 
-const KEY = 'kooperativsystemet-demo-v4';
+const KEY = 'kooperativsystemet-demo-v5';
 const subs = new Set();
 const fresh = () => ({ ...materializeSeed(), credentials: {}, session: null, notifications: [], messages: [] });
 
@@ -86,6 +86,12 @@ async function buildSlides(slides) {
   return out;
 }
 const place = ({ country, region, city }) => ({ country: (country || '').trim() || null, region: (region || '').trim() || null, city: (city || '').trim() || null });
+// Plats + adress + kartposition (slås upp automatiskt).
+async function located({ country, region, city, address }) {
+  const p = { ...place({ country, region, city }), address: (address || '').trim() || null };
+  const pos = await geocode(p);
+  return { ...p, lat: pos?.lat ?? null, lng: pos?.lng ?? null };
+}
 function addCategories(cats) {
   for (const c of cats) if (!db.categories.some((x) => x.name.toLowerCase() === c.toLowerCase())) db.categories.push({ name: c, created_at: now() });
 }
@@ -164,25 +170,25 @@ export const api = {
     const highlights = db.highlights.filter((h) => h.group_id === id).sort((a, b) => a.created_at.localeCompare(b.created_at));
     return clone({ ...g, members, highlights });
   },
-  async createGroup({ name, description, homepage, country, region, city, avatarFile }) {
+  async createGroup({ name, description, homepage, country, region, city, address, avatarFile }) {
     const me = needMe();
     name = (name || '').trim();
     if (!name) throw new Error('Ge gruppen ett namn.');
     if (db.groups.some((g) => g.name.toLowerCase() === name.toLowerCase())) throw new Error('Det finns redan en grupp med det namnet.');
-    const g = { id: uuid(), name, description: (description || '').trim(), homepage: normalizeUrl(homepage), ...place({ country, region, city }), avatar_url: avatarFile ? await storeImage(avatarFile, 400) : null,
+    const g = { id: uuid(), name, description: (description || '').trim(), homepage: normalizeUrl(homepage), ...(await located({ country, region, city, address })), avatar_url: avatarFile ? await storeImage(avatarFile, 400) : null,
       created_by: me, created_at: now(), last_activity_at: now() };
     db.groups.push(g);
     db.members.push({ group_id: g.id, user_id: me, role: 'admin', joined_at: now() });
     persist();
     return clone(g);
   },
-  async updateGroup(id, { name, description, homepage, country, region, city, avatarFile }) {
+  async updateGroup(id, { name, description, homepage, country, region, city, address, avatarFile }) {
     needAdmin(id);
     const g = db.groups.find((x) => x.id === id);
     if (name?.trim()) g.name = name.trim();
     if (description !== undefined) g.description = description.trim();
     if (homepage !== undefined) g.homepage = normalizeUrl(homepage);
-    if (country !== undefined) Object.assign(g, place({ country, region, city }));
+    if (country !== undefined) Object.assign(g, await located({ country, region, city, address }));
     if (avatarFile) g.avatar_url = await storeImage(avatarFile, 400);
     persist();
   },

@@ -133,3 +133,19 @@ export const blobToDataURL = (blob) => new Promise((res, rej) => {
   r.onerror = rej;
   r.readAsDataURL(blob);
 });
+
+// Slår upp en adress på OpenStreetMap (Nominatim) för att kunna visa gruppen på kartan.
+// Hittas inte adressen provas staden. Ger null om inget hittas.
+export async function geocode({ address, city, region, country }) {
+  const tries = [[address, city, region, country], [city, region, country]]
+    .map((parts) => parts.filter((x) => (x || '').trim()).join(', '))
+    .filter((q, i, all) => q && all.indexOf(q) === i);
+  for (const q of tries) {
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=sv&q=${encodeURIComponent(q)}`);
+      const [hit] = await r.json();
+      if (hit) return { lat: Number(hit.lat), lng: Number(hit.lon) };
+    } catch { /* försök nästa */ }
+  }
+  return null;
+}

@@ -18,7 +18,8 @@ function PlaceFields({ value, onChange }) {
       <datalist id="dl-region">${uniq('region', (g) => g.country === value.country).map((r) => html`<option value=${r} />`)}</datalist></label>
     <label>Stad eller ort<input list="dl-city" required value=${value.city} onInput=${set('city')} placeholder="t.ex. Göteborg" />
       <datalist id="dl-city">${uniq('city', (g) => g.country === value.country && (!value.region || g.region === value.region)).map((c) => html`<option value=${c} />`)}</datalist></label>
-    <small class="muted">Används för att visa flödet för en stad, region eller ett land.</small>
+    <label>Adress eller område <small>(för kartan)</small><input value=${value.address || ''} onInput=${set('address')} placeholder="t.ex. Ringön eller Järnmalmsgatan 4" /></label>
+    <small class="muted">Staden används för att visa flödet per stad, region eller land. Adressen gör att gruppen hamnar rätt på kartan; utan adress placeras den mitt i staden.</small>
   </fieldset>`;
 }
 const placeText = (g) => [g.city, g.region, g.country].filter(Boolean).join(', ');
@@ -127,7 +128,7 @@ export function GroupSettings({ id }) {
 
   async function save(e) {
     e.preventDefault();
-    if (await attempt(() => api.updateGroup(id, { name: name ?? grp.name, description: desc ?? grp.description, homepage: homepage ?? grp.homepage ?? '', ...(where || { country: grp.country || 'Sverige', region: grp.region || '', city: grp.city || '' }), avatarFile: file }), 'Sparat')) {
+    if (await attempt(() => api.updateGroup(id, { name: name ?? grp.name, description: desc ?? grp.description, homepage: homepage ?? grp.homepage ?? '', ...(where || { country: grp.country || 'Sverige', region: grp.region || '', city: grp.city || '', address: grp.address || '' }), avatarFile: file }), 'Sparat')) {
       await refreshMe(); g.reload();
     }
   }
@@ -140,7 +141,7 @@ export function GroupSettings({ id }) {
       <label>Namn<input required value=${name ?? grp.name} onInput=${(e) => setName(e.target.value)} /></label>
       <label>Beskrivning<textarea rows="3" value=${desc ?? grp.description} onInput=${(e) => setDesc(e.target.value)}></textarea></label>
       <label>Hemsida <small>(valfri)</small><input inputmode="url" autocapitalize="off" value=${homepage ?? grp.homepage ?? ''} onInput=${(e) => setHomepage(e.target.value)} placeholder="https://…" /></label>
-      <${PlaceFields} value=${where || { country: grp.country || 'Sverige', region: grp.region || '', city: grp.city || '' }} onChange=${setWhere} />
+      <${PlaceFields} value=${where || { country: grp.country || 'Sverige', region: grp.region || '', city: grp.city || '', address: grp.address || '' }} onChange=${setWhere} />
       <button class="btn primary block">Spara</button>
     </form>
 
@@ -174,7 +175,7 @@ export function NewGroup({ next }) {
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [homepage, setHomepage] = useState('');
-  const [where, setWhere] = useState({ country: 'Sverige', region: '', city: '' });
+  const [where, setWhere] = useState({ country: 'Sverige', region: '', city: '', address: '' });
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   async function submit(e) {

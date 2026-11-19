@@ -20,8 +20,8 @@ sql += rows('profiles', ['id', 'name', 'created_at', 'last_seen_at'],
   SEED.profiles.map((p) => [lit(p.id), lit(p.name), ago(p.h), ago(p.seen)]));
 
 // created_by sätts efteråt så att triggern inte lägger till skaparen som admin två gånger
-sql += rows('groups', ['id', 'name', 'description', 'avatar_url', 'country', 'region', 'city', 'created_at', 'last_activity_at'],
-  SEED.groups.map((g) => [lit(g.id), lit(g.name), lit(g.description), lit(g.avatar_url), lit(g.country), lit(g.region), lit(g.city), ago(g.h), ago(act.groups[g.id] ?? g.h)]));
+sql += rows('groups', ['id', 'name', 'description', 'avatar_url', 'country', 'region', 'city', 'address', 'lat', 'lng', 'created_at', 'last_activity_at'],
+  SEED.groups.map((g) => [lit(g.id), lit(g.name), lit(g.description), lit(g.avatar_url), lit(g.country), lit(g.region), lit(g.city), lit(g.address ?? null), lit(g.lat ?? null), lit(g.lng ?? null), ago(g.h), ago(act.groups[g.id] ?? g.h)]));
 sql += SEED.groups.map((g) => `update public.groups set created_by = ${lit(g.created_by)} where id = ${lit(g.id)};`).join('\n') + '\n';
 
 sql += rows('group_members', ['group_id', 'user_id', 'role', 'joined_at'],

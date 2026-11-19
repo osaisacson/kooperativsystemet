@@ -26,7 +26,7 @@ function InstallHint() {
 const PLUS = html`<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
 
 // Platsväljaren överst: stad → region → land → hela världen, plus andra städer där det finns grupper.
-function PlaceSwitcher({ groups }) {
+export function PlaceSwitcher({ groups }) {
   const s = useStore();
   const [open, setOpen] = useState(false);
   const place = s.place || { level: 'world' };
@@ -92,6 +92,7 @@ export function Home() {
   return html`<div class="page">
     <header class="topbar brand">
       <${PlaceSwitcher} groups=${groups.data || []} />
+      <a class="iconbtn map-btn" href="#/karta" aria-label="Visa grupperna på kartan" title="Karta"><${Icon} name="map" /></a>
       <div class="topbar-side right">
         ${s.badges.todos > 0 && html`<a class="iconbtn" href="#/att-gora" aria-label="Att göra med finansiering"><${Icon} name="check" /><${Count} n=${s.badges.todos} /></a>`}
         <a class="iconbtn" href="#/meddelanden" aria-label="Meddelanden"><${Icon} name="chat" /><${Count} n=${s.badges.messages} /></a>
@@ -181,12 +182,13 @@ const TYPE_TITLE = { vanlig: 'Nytt inlägg', finansiering: 'Ny finansiering', lo
 function FinanceSteps() {
   return html`<div class="steps">
     <strong>Så fungerar finansieringen</strong>
+    <p class="steps-owner"><b>Du som lägger upp inlägget ansvarar för pengarna.</b> Det är du som får notiserna om nya ansökningar, du som beviljar eller avslår och du som betalar ut. Inläggets grupp syns som avsändare, men ansvaret ligger hos dig personligen.</p>
     <ol>
       <li>Du anger hur mycket pengar som finns, om de går till <em>en mottagare</em> eller kan sökas i <em>delbelopp</em> av flera, och hur länge inlägget ska ligga uppe.</li>
       <li>Den som vill söka trycker på <b>Ansök</b> på inlägget och skriver en motivering. Motiveringen blir en kommentar som alla kan läsa, märkt <span class="badge applied">Ansökt</span>.</li>
       <li>Den sökande anger också belopp och swishnummer – eller bankkonto om beloppet är över ${fmtKr(PAYOUT_BANK_LIMIT)}. Betalningsuppgifterna syns bara för dig och den sökande.</li>
-      <li>Du får en notis för varje ansökan och trycker <b>Bevilja</b> eller <b>Avslå</b> direkt under kommentaren.</li>
-      <li>Beviljade ansökningar hamnar i din att göra-lista (✓ uppe till höger), t.ex. ”Swisha Maja Ek 2 500 kr till 070-…”.</li>
+      <li>Varje ny ansökan hamnar i <em>din</em> att göra-lista (✓ uppe till höger). Du trycker <b>Bevilja</b> eller <b>Avslå</b> direkt under kommentaren.</li>
+      <li>Beviljade ansökningar ligger kvar i din att göra-lista som en utbetalning, t.ex. ”Swisha Maja Ek 2 500 kr till 070-…”.</li>
       <li>Du betalar själv via Swish eller bank och bockar sedan av raden. Ansökan märks <span class="badge paid">Utbetald</span> och mätaren på inlägget visar hur mycket som finns kvar.</li>
     </ol>
     <small class="muted">Appen hanterar inga pengar – den håller bara ordning på ansökningar och utbetalningar. Du kan stänga finansieringen när som helst via ··· på inlägget.</small>

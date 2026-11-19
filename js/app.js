@@ -7,6 +7,7 @@ import { Home, PostView, Compose } from './views/feed.js';
 import { GroupView, GroupSettings, NewGroup, Welcome } from './views/groups.js';
 import { AuthView, Search, Profile, EditProfile, NewPassword } from './views/people.js';
 import { Notifications, Todos, Inbox, Thread, NewMessage } from './views/inbox.js';
+import { MapView } from './views/map.js';
 
 function parse() {
   let h = location.hash.slice(1);
@@ -22,6 +23,7 @@ function route({ parts: [a, b, c], query }) {
     case 'sok': return html`<${Search} tab=${query.get('flik')} />`;
     case 'ny': return html`<${Compose} groupId=${query.get('grupp')} type=${query.get('typ')} />`;
     case 'notiser': return html`<${Notifications} />`;
+    case 'karta': return html`<${MapView} />`;
     case 'profil': return html`<${Profile} id=${b} />`;
     case 'redigera-profil': return html`<${EditProfile} />`;
     case 'grupp': return c === 'installningar' ? html`<${GroupSettings} id=${b} />` : html`<${GroupView} id=${b} />`;

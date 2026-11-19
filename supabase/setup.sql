@@ -23,6 +23,9 @@ create table public.groups (
   country text,                              -- land, region och stad: flödet kan visas per plats
   region text,
   city text,
+  address text,                              -- gatuadress eller område, visas på kartan
+  lat double precision,
+  lng double precision,
   avatar_url text,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
