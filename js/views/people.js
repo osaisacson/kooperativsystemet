@@ -146,6 +146,12 @@ export function EditProfile() {
     e.preventDefault();
     if (await attempt(() => api.updateProfile({ name, nickname, avatarFile: file }), 'Profilen sparades')) { await refreshMe(); go('/profil/' + s.me.id); }
   }
+  async function leave(g) {
+    const msg = g.role === 'admin'
+      ? `Lämna ${g.name}? Är du gruppens enda admin blir den som varit med längst admin.`
+      : `Lämna ${g.name}?`;
+    if (confirm(msg) && await attempt(() => api.leaveGroup(g.id), `Du har lämnat ${g.name}`)) await refreshMe();
+  }
   return html`<div class="page">
     <${Header} title="Redigera profil" back />
     <form class="form pad" onSubmit=${save}>
@@ -154,5 +160,10 @@ export function EditProfile() {
       <label>Smeknamn <small>(valfritt)</small><input value=${nickname} onInput=${(e) => setNickname(e.target.value)} /></label>
       <button class="btn primary block">Spara</button>
     </form>
+    ${s.myGroups.length > 0 && html`<div class="label pad-x">Dina grupper</div>
+    <div class="list">${s.myGroups.map((g) => html`<div class="row" key=${g.id}>
+      <a href=${'#/grupp/' + g.id}><${Avatar} src=${g.avatar_url} name=${g.name} size=${40} /></a>
+      <a class="row-main" href=${'#/grupp/' + g.id}><strong>${g.name}</strong><small class="muted">${g.role === 'admin' ? 'Admin' : 'Medlem'}</small></a>
+      <button class="btn small" onClick=${() => leave(g)}>Lämna</button></div>`)}</div>`}
   </div>`;
 }

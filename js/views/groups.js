@@ -21,11 +21,6 @@ export function GroupView({ id }) {
   const reload = () => { g.reload(); posts.reload(); };
 
   async function join() { if (await attempt(() => api.joinGroup(id), `Välkommen till ${grp.name}!`)) { await refreshMe(); g.reload(); } }
-  async function leave() {
-    const lastAdmin = admin && grp.members.filter((m) => m.role === 'admin').length === 1 && grp.members.length > 1;
-    if (!confirm(lastAdmin ? 'Du är gruppens enda admin. Om du lämnar blir den som varit med längst admin. Lämna ändå?' : `Lämna ${grp.name}?`)) return;
-    if (await attempt(() => api.leaveGroup(id))) { await refreshMe(); g.reload(); }
-  }
 
   return html`<div class="page">
     <${Header} title=${grp.name} back right=${admin && html`<a class="iconbtn" href=${`#/grupp/${id}/installningar`} aria-label="Gruppinställningar"><${Icon} name="gear" /></a>`} />
@@ -40,7 +35,7 @@ export function GroupView({ id }) {
     <div class="profile-info"><strong>${grp.name}</strong>${grp.description && html`<p>${grp.description}</p>`}
       ${grp.homepage && html`<a class="homepage" href=${grp.homepage} target="_blank" rel="noopener noreferrer">${prettyUrl(grp.homepage)}</a>`}</div>
     ${member && html`<div class="profile-actions">
-      <a class="btn primary" href=${'#/ny?grupp=' + id}>Nytt inlägg</a><button class="btn" onClick=${leave}>Lämna gruppen</button>
+      <a class="btn primary" href=${'#/ny?grupp=' + id}>Nytt inlägg</a>
     </div>`}
 
     <div class="members-head">

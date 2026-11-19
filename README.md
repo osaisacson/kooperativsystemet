@@ -71,3 +71,8 @@ supabase/setup.sql    tabeller, regler och funktioner
 supabase/seed.sql     exempeldata (skapas med: node tools/build-seed-sql.mjs)
 supabase/reset.sql    tar bort allt (även data) så att setup.sql kan köras om
 ```
+
+## Licens
+
+[GNU AGPL-3.0](LICENSE). Du får använda, kopiera och ändra koden fritt. Om du kör en ändrad version som en tjänst
+för andra måste du också dela med dig av dina ändringar under samma licens – så att förbättringar stannar i det gemensamma.
