@@ -53,7 +53,7 @@ function App() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     const onHash = () => { setR(parse()); window.scrollTo(0, 0); refreshBadges(); };
-    const linkError = new URLSearchParams(location.hash.slice(1)).get('error_description');
+    const linkError = api.takeLinkError?.() || new URLSearchParams(location.hash.slice(1)).get('error_description');
     if (linkError) {
       toast(/expired|invalid/i.test(linkError) ? 'Länken har gått ut eller redan använts. Be om en ny.' : linkError);
       history.replaceState(null, '', location.pathname);

@@ -21,7 +21,7 @@ export function AuthView() {
       if (mode === 'login') { await api.signIn({ email, password }); go('/'); }
       else if (mode === 'reset') {
         await api.requestPasswordReset(email);
-        setInfo('Om det finns ett konto med den adressen har vi skickat ett mejl med en länk. Öppna länken för att välja ett nytt lösenord.');
+        setInfo('Om det finns ett konto med den adressen har vi skickat ett mejl med en länk. Hittar du det inte? Titta i skräpposten.');
         return;
       } else {
         const r = await api.signUp({ email, password, name, nickname, avatarFile: file });

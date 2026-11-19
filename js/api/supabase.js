@@ -8,6 +8,17 @@ import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, sortCa
 let recovering = /type=recovery/.test(location.hash);
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let meId = null;
+let linkError = null;
+
+// Länken i vårt eget återställningsmejl pekar direkt på appen: ?token_hash=…&type=recovery
+// (att länka till appens egen adress i stället för supabase.co gör att mejlet ser mindre misstänkt ut).
+const qp = new URLSearchParams(location.search);
+if (qp.get('token_hash') && qp.get('type') === 'recovery') {
+  const { error } = await sb.auth.verifyOtp({ token_hash: qp.get('token_hash'), type: 'recovery' });
+  history.replaceState(null, '', location.pathname);
+  if (error) linkError = 'Länken har gått ut eller redan använts. Be om en ny.';
+  else recovering = true;
+}
 
 const ok = ({ data, error }) => {
   if (error) throw new Error(translate(error.message));
@@ -86,6 +97,7 @@ export const api = {
   async signIn({ email, password }) { ok(await sb.auth.signInWithPassword({ email: email.trim(), password })); },
   async signOut() { await sb.auth.signOut(); meId = null; },
   isRecovering() { return recovering; },
+  takeLinkError() { const e = linkError; linkError = null; return e; },
   async requestPasswordReset(email) {
     if (!/^\S+@\S+\.\S+$/.test((email || '').trim())) throw new Error('Ange din e-postadress.');
     ok(await sb.auth.resetPasswordForEmail(email.trim(), { redirectTo: location.origin + location.pathname }));
