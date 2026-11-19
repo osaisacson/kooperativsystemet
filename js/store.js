@@ -41,6 +41,8 @@ export async function refreshMe() {
   setState({ recovering: !!api.isRecovering?.() });
   if (!me) return setState({ me: null, myGroups: [], memberOf: new Set(), adminOf: new Set() });
   const myGroups = await api.myGroups();
+  const isNew = Date.now() - new Date(me.created_at) < 10 * 60e3;
+  if (isNew && !myGroups.length && (location.hash === '' || location.hash === '#/')) go('/valkommen');
   setState({
     me, myGroups,
     memberOf: new Set(myGroups.map((g) => g.id)),

@@ -96,6 +96,9 @@ export const api = {
   },
   async signIn({ email, password }) { ok(await sb.auth.signInWithPassword({ email: email.trim(), password })); },
   async signOut() { await sb.auth.signOut(); meId = null; },
+  async signInWithProvider(provider) {
+    ok(await sb.auth.signInWithOAuth({ provider, options: { redirectTo: location.origin + location.pathname } }));
+  },
   isRecovering() { return recovering; },
   takeLinkError() { const e = linkError; linkError = null; return e; },
   async requestPasswordReset(email) {

@@ -364,3 +364,10 @@ fieldset.types legend { padding: 0; margin: 0 0 8px; }
 /* iPhone zoomar in när man trycker i ett fält med text mindre än 16px – och en sparad app behåller zoomen.
    Därför 16px i alla skrivfält. */
 input, textarea, select { font-size: 16px !important; }
+
+/* ---- Inloggning med Google/Apple ---- */
+.providers { display: flex; flex-direction: column; gap: 8px; }
+.btn.provider { margin-top: 0; gap: 10px; background: var(--bg); font-weight: 600; }
+.btn.provider.apple { background: #000; color: #fff; border-color: #000; }
+.divider { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; color: var(--muted); font-size: 12.5px; }
+.divider::before, .divider::after { content: ''; flex: 1; border-top: 1px solid var(--line); }

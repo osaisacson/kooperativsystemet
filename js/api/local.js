@@ -114,6 +114,7 @@ export const api = {
   },
   async signOut() { db.session = null; persist(); emit(); },
   isRecovering() { return false; },
+  async signInWithProvider() { throw new Error('Inloggning med Google/Apple fungerar bara med Supabase.'); },
   async requestPasswordReset() { throw new Error('I demoläget skickas inga mejl. Skapa ett nytt konto i stället.'); },
   async setNewPassword() {},
   async touch() { const p = db.profiles.find((x) => x.id === db.session); if (p) { p.last_seen_at = now(); persist(); } },
