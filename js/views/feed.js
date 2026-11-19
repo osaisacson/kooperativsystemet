@@ -122,7 +122,7 @@ export function Home() {
       ${tab !== 'minne' && html`<a class="chip-add" href=${'#/ny?typ=' + (tab === 'flode' ? 'vanlig' : tab)} aria-label=${{ flode: 'Nytt inlägg', finansiering: 'Ny finansiering', lokal: 'Ny lokal' }[tab]}>${PLUS}</a>`}
     </div>
     ${tab === 'lokal' && html`<div class="space-filters">
-      <label><input list="dl-fn" value=${fn} onInput=${(e) => setFn(e.target.value)} placeholder="Användningsområde" aria-label="Filtrera på användningsområde" />
+      <label><input list="dl-fn" value=${fn} onInput=${(e) => setFn(e.target.value)} placeholder="Användning" aria-label="Filtrera på användning" />
         ${fn && html`<button class="clear" aria-label="Rensa" onClick=${() => setFn('')}>×</button>`}
         <datalist id="dl-fn">${functions.map((f) => html`<option value=${f} />`)}</datalist></label>
       <label><input list="dl-cost" value=${cost} onInput=${(e) => setCost(e.target.value)} placeholder="Kostnad" aria-label="Filtrera på kostnad" />
