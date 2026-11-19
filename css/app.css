@@ -477,3 +477,6 @@ a.todo small { display: block; }
 .cal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .cal-main strong { font-size: 14.5px; }
 .cal-count { color: var(--accent); font-size: 12px; }
+.cal-sub { padding: 8px 16px 0; font-size: 14px; }
+.cal-sub .nudge p { margin: 6px 0 10px; }
+.cal-sub small { display: block; margin-top: 8px; }

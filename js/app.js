@@ -76,3 +76,6 @@ function App() {
 }
 
 render(html`<${App} />`, document.getElementById('root'));
+
+// Service worker för push-notiser (och siffran på appikonen när appen är stängd)
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

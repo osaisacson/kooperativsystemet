@@ -1,7 +1,7 @@
 // Kalendern: kommande evenemang, filtrerade på vald stad/region/land och på postnummer.
 import { html, useState } from '../lib.js';
 import { api } from '../api/index.js';
-import { useStore, useAsync } from '../store.js';
+import { useStore, useAsync, toast } from '../store.js';
 import { Avatar, Loading, ErrorBox } from '../ui.js';
 import { inPlace, placeLabel, eventTitle } from '../util.js';
 import { PlaceSwitcher } from './feed.js';
@@ -10,6 +10,26 @@ import { PlaceSwitcher } from './feed.js';
 const eventPlace = (p) => ({
   city: p.event_city || p.group?.city, region: p.event_region || p.group?.region, country: p.event_country || p.group?.country,
 });
+
+// Prenumerera: telefonens kalender hämtar en egen länk regelbundet, så evenemang man är intresserad av
+// eller kommer på läggs till – och ändras eller försvinner – av sig själva.
+function Subscribe() {
+  const [url, setUrl] = useState(null);
+  const [open, setOpen] = useState(false);
+  if (api.mode !== 'supabase') return null;
+  async function show() { setOpen(true); if (!url) setUrl(await api.calendarUrl().catch((e) => { toast(e.message); return null; })); }
+  return html`<div class="cal-sub">
+    ${!open ? html`<button class="link" onClick=${show}>Få dina evenemang i telefonens kalender</button>` : html`<div class="nudge">
+      <strong>Prenumerera på dina evenemang</strong>
+      <p>Evenemang du trycker <b>Intresserad</b> eller <b>Kommer</b> på (och dina egna) hamnar i din kalender och uppdateras automatiskt om tid, plats eller något annat ändras.</p>
+      ${url ? html`<div class="btnrow">
+          <a class="btn small primary" href=${url.replace(/^https:/, 'webcal:')}>Lägg till i kalendern</a>
+          <button class="btn small" onClick=${async () => { try { await navigator.clipboard.writeText(url); toast('Länken är kopierad'); } catch { prompt('Kopiera länken:', url); } }}>Kopiera länk</button>
+        </div>
+        <small class="muted">Google Kalender: Andra kalendrar → + → Från webbadress, och klistra in länken. Dela inte länken – den visar dina evenemang.</small>` : html`<${Loading} />`}
+    </div>`}
+  </div>`;
+}
 
 export function CalendarView() {
   const s = useStore();
@@ -41,6 +61,7 @@ export function CalendarView() {
   return html`<div class="page">
     <header class="topbar brand"><${PlaceSwitcher} groups=${groups.data || []} />
       <a class="chip-add" href="#/ny?typ=evenemang" aria-label="Nytt evenemang" style="margin-left:auto"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></a></header>
+    <${Subscribe} />
     <div class="cal-filter">
       <input inputmode="numeric" value=${zip} onInput=${(e) => setZip(e.target.value)} placeholder="Postnummer" aria-label="Filtrera på postnummer" />
       ${zip && html`<button class="clear" aria-label="Rensa" onClick=${() => setZip('')}>×</button>`}

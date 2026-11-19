@@ -1,7 +1,7 @@
 // Inloggning/registrering, sök, profil och redigera profil.
 import { html, useState, useEffect } from '../lib.js';
 import { api } from '../api/index.js';
-import { APP_NAME, AUTH_PROVIDERS } from '../config.js';
+import { APP_NAME, AUTH_PROVIDERS, VAPID_PUBLIC_KEY } from '../config.js';
 import { useStore, useAsync, go, attempt, refreshMe, refreshBadges, setState, toast } from '../store.js';
 import { Avatar, Header, PostGrid, GroupRow, UserRow, ImagePicker, Loading, ErrorBox } from '../ui.js';
 
@@ -139,7 +139,7 @@ export function Profile({ id }) {
         ? html`<a class="btn" href="#/redigera-profil">Redigera profil</a><button class="btn" onClick=${logout}>Logga ut</button>`
         : html`<a class="btn primary" href=${'#/meddelanden/' + id}>Skicka meddelande</a>`}
     </div>
-    ${isMe && html`<${BadgeSetting} />`}
+    ${isMe && html`<${PushSetting} />`}
     ${isMe && user.groups.length === 0 && html`<div class="nudge pad-x">Du är inte med i någon grupp än. <a href="#/valkommen">Hitta eller skapa en grupp</a></div>`}
     <div class="grid-sep"></div>
     ${posts.data ? html`<${PostGrid} posts=${posts.data} />` : html`<${Loading} />`}
@@ -172,15 +172,38 @@ export function NewPassword() {
   </div>`;
 }
 
-// iPhone visar bara siffran på appikonen om man gett appen tillåtelse att visa notiser.
-function BadgeSetting() {
-  const supported = 'setAppBadge' in navigator && 'Notification' in window;
+// Notiser + siffra på appikonen, även när appen är stängd (push). På iPhone fungerar det bara i appen sparad på hemskärmen.
+const urlB64 = (s) => { const p = '='.repeat((4 - (s.length % 4)) % 4); const r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, (c) => c.charCodeAt(0)); };
+function PushSetting() {
+  const supported = api.mode === 'supabase' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const ios = /iphone|ipad/i.test(navigator.userAgent);
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-  const [perm, setPerm] = useState(supported ? Notification.permission : 'unsupported');
-  if (!supported || !standalone || perm === 'granted' || perm === 'denied') return null;
-  return html`<div class="nudge pad-x badge-setting">
-    <span>Vill du se en röd siffra på appikonen när du har nya meddelanden eller något att göra?</span>
-    <button class="btn small primary" onClick=${async () => { setPerm(await Notification.requestPermission()); refreshBadges(); }}>Slå på</button>
+  const [state, setState2] = useState('laddar');
+  useEffect(() => {
+    if (!supported) return setState2('nej');
+    navigator.serviceWorker.ready.then((r) => r.pushManager.getSubscription()).then((s) => setState2(s && Notification.permission === 'granted' ? 'på' : Notification.permission === 'denied' ? 'nekad' : 'av'));
+  }, []);
+  if (!supported) return ios && !standalone ? html`<div class="nudge badge-setting"><span>Spara appen på hemskärmen för att kunna få notiser och en siffra på appikonen.</span></div>` : null;
+  async function on() {
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return setState2(perm === 'denied' ? 'nekad' : 'av');
+      const reg = await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(VAPID_PUBLIC_KEY) });
+      await api.savePushSubscription(sub);
+      setState2('på'); toast('Notiser är på'); refreshBadges();
+    } catch (e) { toast('Det gick inte att slå på notiser: ' + e.message); }
+  }
+  async function off() {
+    const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription();
+    if (sub) { await api.removePushSubscription(sub.endpoint).catch(() => {}); await sub.unsubscribe(); }
+    setState2('av'); toast('Notiser är avstängda');
+  }
+  if (state === 'laddar') return null;
+  return html`<div class="nudge badge-setting">
+    ${state === 'på' ? html`<span>Notiser är på: du får besked om nya meddelanden och ansökningar, och en siffra på appikonen.</span><button class="btn small" onClick=${off}>Stäng av</button>`
+      : state === 'nekad' ? html`<span>Notiser är blockerade för appen. Slå på dem i telefonens inställningar för appen.</span>`
+      : html`<span>Vill du få notiser om nya meddelanden och ansökningar, och en siffra på appikonen?</span><button class="btn small primary" onClick=${on}>Slå på</button>`}
   </div>`;
 }
 

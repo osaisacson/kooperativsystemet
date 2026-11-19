@@ -32,6 +32,21 @@ Knappen **Återställ** överst i flödet tömmer demodatan.
 Anon-nyckeln är tänkt att synas i webbläsaren – vem som får göra vad styrs av reglerna (Row Level Security) i `setup.sql`.
 Gratisnivån pausar projektet efter en vecka utan användning; det startas igen med ett klick i Supabase.
 
+## Serverfunktioner (kalender och push)
+
+Koden ligger i [`supabase/functions/`](supabase/functions). Skapa två Edge Functions i Supabase (Edge Functions → Deploy a new function → Via Editor) med namnen `kalender` och `push`, klistra in koden och stäng av **Verify JWT** för båda.
+För push behövs ett nyckelpar (VAPID). Den publika nyckeln läggs i `js/config.js`; båda läggs i tabellen `app_settings`:
+
+```sql
+insert into public.app_settings (key, value) values
+  ('vapid_public', '<publik nyckel>'), ('vapid_private', '<privat nyckel>'),
+  ('vapid_subject', 'mailto:<er e-post>'),
+  ('push_url', 'https://<projekt>.supabase.co/functions/v1/push'),
+  ('push_secret', gen_random_uuid()::text);
+```
+
+Ett nyckelpar skapas t.ex. med `npx web-push generate-vapid-keys`. Lägg aldrig den privata nyckeln i koden.
+
 ## Publicera
 
 Det är bara statiska filer, så vilken gratis webbhost som helst fungerar: GitHub Pages, Netlify eller Cloudflare Pages.
@@ -49,6 +64,8 @@ Lägg upp hela mappen. I Supabase, lägg till adressen under **Authentication �
 | Flikar | **Flöde** (allt), **Finansiering** (med summan som går att söka just nu) **Lokaler** (skriv i fälten för användningsområde och kostnad för att filtrera) och **Minne**. Plustecknet vid varje flik skapar ett inlägg av den typen; plustecknet i menyn längst ner låter en välja typ. |
 | Evenemang | Ett inlägg kan markeras som evenemang med datum, tid, plats (adress ur adresslista) och anmälan (Intresserad/Kommer). Kalendern (ikonen längst ner) visar kommande evenemang per stad/region/land och postnummer. "Lägg till i min kalender" ger en kalenderfil som uppdaterar händelsen om den läggs till igen. |
 | Karta | Kartikonen bredvid platsen visar grupperna på OpenStreetMap, inzoomat på vald stad, region eller land. Adresser väljs ur en riktig adresslista (Photon/OpenStreetMap). |
+| Notiser | På sin profil kan man slå på notiser (push) om nya meddelanden och ansökningar. Siffran på appikonen uppdateras även när appen är stängd. Kräver serverfunktionen `push` och nycklar i tabellen `app_settings` (se nedan). |
+| Kalenderprenumeration | I kalendern finns en personlig länk som telefonens kalender hämtar regelbundet: evenemang man är intresserad av, kommer på eller lagt upp uppdateras automatiskt. Serverfunktionen `kalender`. |
 | Minne | Längst ner till höger i varje inlägg finns en knapp för att spara det i långtidsminnet; siffran visar hur många som gjort det och man kan ta tillbaka sin röst. Fliken **Minne** visar de mest sparade först och går att söka på ämne. |
 | Ämnen | Vanliga inlägg kan märkas med ämnen (Energi, Byggmetod, Off-grid …) så att andra hittar dem. Nya ämnen kan skapas. |
 | Finansiering | Totalbelopp, *en mottagare* eller *delbelopp*, slutdatum (kan stängas manuellt). Man söker alltid för en grupp man är med i; ansökan visas som gruppens kommentar ("via" personen) med märket **Ansökt**, belopp och swishnummer (bankkonto över 5 000 kr). Utbetalningsuppgiften syns bara för sökande och givare. **Bevilja** → märket blir **Beviljad** och en rad dyker upp i *Att göra* (✓-ikonen uppe till höger). Bockas den av blir märket **Utbetald** och förloppsmätaren fylls. |

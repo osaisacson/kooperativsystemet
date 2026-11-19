@@ -1,0 +1,46 @@
+// Kalenderprenumeration: /functions/v1/kalender?t=<hemlig nyckel>
+// Ger en .ics med evenemangen personen är intresserad av, kommer på eller själv lagt upp.
+// Telefonens kalender hämtar länken regelbundet, så ändrade eller borttagna evenemang uppdateras av sig själva.
+// Driftsätt med "Verify JWT" avstängt (kalenderappar skickar ingen inloggning).
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
+const APP_URL = 'https://osaisacson.github.io/kooperativsystemet/';
+const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+const z = (d: string) => new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+const esc = (t: string) => String(t || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, (m) => '\\' + m);
+const title = (c: string) => (c || '').split(/\n|(?<=[.!?])\s/)[0].slice(0, 80) || 'Evenemang';
+
+Deno.serve(async (req) => {
+  const token = new URL(req.url).searchParams.get('t');
+  if (!token || !/^[0-9a-f-]{36}$/.test(token)) return new Response('Saknar kalendernyckel', { status: 400 });
+  const { data: who } = await sb.from('user_secrets').select('user_id').eq('calendar_token', token).maybeSingle();
+  if (!who) return new Response('Okänd kalender', { status: 404 });
+
+  const [{ data: rsvps }, { data: own }] = await Promise.all([
+    sb.from('event_rsvps').select('post_id').eq('user_id', who.user_id),
+    sb.from('posts').select('id').eq('author_id', who.user_id).eq('is_event', true),
+  ]);
+  const ids = [...new Set([...(rsvps || []).map((r) => r.post_id), ...(own || []).map((p) => p.id)])];
+  const { data: posts } = ids.length
+    ? await sb.from('posts').select('id, caption, event_start, event_end, event_address, event_city, created_at, updated_at').in('id', ids).eq('is_event', true)
+    : { data: [] };
+
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kooperativsystemet//SV', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'X-WR-CALNAME:Kooperativsystemet', 'X-WR-TIMEZONE:Europe/Stockholm', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
+  for (const p of posts || []) {
+    if (!p.event_start) continue;
+    const end = p.event_end || new Date(new Date(p.event_start).getTime() + 2 * 3600e3).toISOString();
+    const url = `${APP_URL}#/post/${p.id}`;
+    lines.push('BEGIN:VEVENT', `UID:${p.id}@kooperativsystemet`,
+      `SEQUENCE:${Math.floor(new Date(p.updated_at || p.created_at).getTime() / 1000) % 2147483647}`,
+      `DTSTAMP:${z(new Date().toISOString())}`, `LAST-MODIFIED:${z(p.updated_at || p.created_at)}`,
+      `DTSTART:${z(p.event_start)}`, `DTEND:${z(end)}`, `SUMMARY:${esc(title(p.caption))}`,
+      `LOCATION:${esc([p.event_address, p.event_city].filter(Boolean).join(', '))}`,
+      `DESCRIPTION:${esc((p.caption || '') + '\n\n' + url)}`, `URL:${url}`, 'END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return new Response(lines.join('\r\n'), {
+    headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'max-age=900', 'Content-Disposition': 'inline; filename="kooperativsystemet.ics"' },
+  });
+});

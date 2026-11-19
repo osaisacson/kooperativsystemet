@@ -10,3 +10,6 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Inloggning via andra konton. Varje leverantör måste också slås på i Supabase → Authentication → Sign In / Providers.
 // Möjliga värden: 'google', 'apple'.
 export const AUTH_PROVIDERS = ['google'];
+
+// Publik nyckel för push-notiser (den privata ligger bara i databasens app_settings, aldrig i koden).
+export const VAPID_PUBLIC_KEY = 'BOFoj6zvGNLT7pK3VM1NZyLTdZwqi_UIogLfv_pma8XtjDfkisH0FuvByhR4AvVL7Vz1xZkJPWqg2c-OfsbqGnU';

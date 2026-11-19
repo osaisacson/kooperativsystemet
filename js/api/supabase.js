@@ -248,6 +248,15 @@ export const api = {
     const rows = ok(await sb.from('comments').delete().eq('id', id).select('id'));
     if (!rows.length) throw new Error('Det gick inte att ta bort (en beviljad ansökan kan inte tas bort).');
   },
+  async calendarUrl() {
+    const token = ok(await sb.rpc('my_calendar_token'));
+    return `${SUPABASE_URL}/functions/v1/kalender?t=${token}`;
+  },
+  async savePushSubscription(sub) {
+    const j = sub.toJSON();
+    ok(await sb.from('push_subscriptions').upsert({ endpoint: j.endpoint, user_id: needMe(), p256dh: j.keys.p256dh, auth: j.keys.auth }, { onConflict: 'endpoint' }));
+  },
+  async removePushSubscription(endpoint) { ok(await sb.from('push_subscriptions').delete().eq('endpoint', endpoint)); },
   async setRsvp(postId, status) {
     const me = needMe();
     if (!status) ok(await sb.from('event_rsvps').delete().eq('post_id', postId).eq('user_id', me));

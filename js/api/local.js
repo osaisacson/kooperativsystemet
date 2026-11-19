@@ -322,6 +322,9 @@ export const api = {
     delete db.payouts[id];
     persist();
   },
+  async calendarUrl() { throw new Error('Kalenderprenumeration fungerar bara med Supabase.'); },
+  async savePushSubscription() { throw new Error('Push-notiser fungerar bara med Supabase.'); },
+  async removePushSubscription() {},
   async setRsvp(postId, status) {
     const me = needMe();
     db.rsvps = (db.rsvps || []).filter((r) => !(r.post_id === postId && r.user_id === me));
