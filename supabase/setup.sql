@@ -20,6 +20,9 @@ create table public.groups (
   name text not null,
   description text not null default '',
   homepage text,
+  country text,                              -- land, region och stad: flödet kan visas per plats
+  region text,
+  city text,
   avatar_url text,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -53,8 +56,12 @@ create table public.posts (
   author_id uuid not null references public.profiles(id) on delete cascade,
   group_id uuid references public.groups(id) on delete set null,
   caption text not null default '',
-  is_resource boolean not null default false,  -- "Lägg i gemensamma resurser"
-  categories text[] not null default '{}',
+  kind text not null default 'vanlig' check (kind in ('vanlig', 'finansiering', 'lokal')),
+  is_resource boolean not null default false,  -- något andra kan ha nytta av (har ämnen, är finansiering eller lokal)
+  categories text[] not null default '{}',     -- ämnen, t.ex. Energi, Byggmetod, Off-grid
+  space_functions text[] not null default '{}', -- lokaler: vad lokalen kan användas till
+  space_cost text check (space_cost in ('gratis', 'gentjanst', 'kostar')),
+  space_price text,
   fin_total numeric check (fin_total is null or fin_total > 0),
   fin_mode text check (fin_mode in ('single', 'split')),
   fin_expires_at timestamptz,
@@ -131,7 +138,7 @@ create table public.email_outbox (
   sent_at timestamptz
 );
 
-insert into public.categories (name) values ('Finansiering'), ('Lokaler');
+insert into public.categories (name) values ('Energi'), ('Byggmetod'), ('Off-grid'), ('Vatten'), ('Avfall'), ('Mat'), ('Ekonomi');
 
 -- ---------- Hjälpfunktioner -------------------------------------------
 

@@ -3,7 +3,24 @@ import { useState, useEffect } from './lib.js';
 import { api } from './api/index.js';
 
 const listeners = new Set();
+// Vald plats för flödet (stad, region, land eller hela världen). Sparas i webbläsaren.
+function loadPlace() { try { return JSON.parse(localStorage.getItem('place')) || null; } catch { return null; } }
+export function setPlace(place) {
+  try { localStorage.setItem('place', JSON.stringify(place)); } catch { /* går bra utan */ }
+  setState({ place });
+}
+// Standard: staden där de flesta av ens grupper finns.
+function defaultPlace(groups) {
+  const counts = {};
+  for (const g of groups) if (g.city) { const k = `${g.city}|${g.region || ''}|${g.country || ''}`; counts[k] = (counts[k] || 0) + 1; }
+  const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  if (!best) return { level: 'world' };
+  const [city, region, country] = best[0].split('|');
+  return { level: 'city', city, region: region || null, country: country || null };
+}
+
 export const state = {
+  place: loadPlace(),
   me: null, myGroups: [], memberOf: new Set(), adminOf: new Set(),
   badges: { notifications: 0, messages: 0, todos: 0 }, toast: null,
 };
@@ -43,6 +60,7 @@ export async function refreshMe() {
   const myGroups = await api.myGroups();
   const isNew = Date.now() - new Date(me.created_at) < 10 * 60e3;
   if (isNew && !myGroups.length && (location.hash === '' || location.hash === '#/')) go('/valkommen');
+  if (!state.place) setState({ place: defaultPlace(myGroups) });
   setState({
     me, myGroups,
     memberOf: new Set(myGroups.map((g) => g.id)),

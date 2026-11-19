@@ -1,7 +1,32 @@
-export const FINANCE = 'Finansiering';
-// Typ av inlägg: vanlig post, tillgänglig finansiering eller gemensam resurs.
-export const POST_TYPES = { vanlig: 'Vanlig post', finansiering: 'Tillgänglig finansiering', resurs: 'Gemensamma resurser' };
-export const postType = (p) => (p.fin_total != null ? 'finansiering' : p.is_resource ? 'resurs' : 'vanlig');
+// Typ av inlägg.
+export const POST_TYPES = { vanlig: 'Vanlig post', finansiering: 'Tillgänglig finansiering', lokal: 'Lokal att låna eller hyra' };
+export const postType = (p) => p.kind || (p.fin_total != null ? 'finansiering' : 'vanlig');
+
+// Lokaler: vad de kan användas till och vad de kostar.
+export const DEFAULT_FUNCTIONS = ['Verkstad', 'Kök', 'Möteslokal', 'Förråd', 'Odling', 'Ateljé', 'Övernattning'];
+export const SPACE_COSTS = { gratis: 'Gratis', gentjanst: 'Mot gentjänst', kostar: 'Kostar' };
+
+// Plats: flödet kan visas för en stad, en region, ett land eller hela världen.
+export const PLACE_LEVELS = { city: 'stad', region: 'region', country: 'land', world: '' };
+export function placeLabel(place) {
+  if (!place || place.level === 'world') return 'Hela världen';
+  return place[place.level] || 'Hela världen';
+}
+export function inPlace(group, place) {
+  if (!place || place.level === 'world') return true;
+  if (!group) return false;  // inlägg utan grupp visas bara för hela världen
+  const same = (k) => (group[k] || '').toLowerCase() === (place[k] || '').toLowerCase();
+  if (place.level === 'country') return same('country');
+  if (place.level === 'region') return same('country') && same('region');
+  return same('country') && same('city');
+}
+export const countryNames = () => {
+  try {
+    const dn = new Intl.DisplayNames(['sv'], { type: 'region' });
+    const codes = 'AD AE AF AL AM AO AR AT AU AZ BA BD BE BF BG BH BI BJ BO BR BT BW BY BZ CA CD CF CG CH CI CL CM CN CO CR CU CY CZ DE DJ DK DO DZ EC EE EG ER ES ET FI FJ FR GA GB GE GH GM GN GR GT GW GY HN HR HT HU ID IE IL IN IQ IR IS IT JM JO JP KE KG KH KR KW KZ LA LB LK LR LS LT LU LV LY MA MD ME MG MK ML MM MN MR MT MU MW MX MY MZ NA NE NG NI NL NO NP NZ OM PA PE PG PH PK PL PS PT PY QA RO RS RU RW SA SD SE SG SI SK SL SN SO SR SS SV SY TD TG TH TJ TL TN TR TT TW TZ UA UG US UY UZ VE VN YE ZA ZM ZW'.split(' ');
+    return codes.map((c) => dn.of(c)).sort((a, b) => a.localeCompare(b, 'sv'));
+  } catch { return ['Sverige', 'Norge', 'Danmark', 'Finland']; }
+};
 
 // "kooperativ.se" → "https://kooperativ.se". Tomt → null.
 export function normalizeUrl(u) {
@@ -11,7 +36,8 @@ export function normalizeUrl(u) {
   try { return new URL(u).href; } catch { throw new Error('Webbadressen ser inte rätt ut.'); }
 }
 export const prettyUrl = (u) => u.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
-export const DEFAULT_CATEGORIES = ['Finansiering', 'Lokaler'];
+// Ämnen som föreslås för vanliga inlägg (fler kan skapas).
+export const DEFAULT_CATEGORIES = ['Energi', 'Byggmetod', 'Off-grid', 'Vatten', 'Avfall', 'Mat', 'Ekonomi'];
 export const PAYOUT_BANK_LIMIT = 5000; // över detta belopp betalas till bankkonto i stället för Swish
 
 export const fmtKr = (n) => new Intl.NumberFormat('sv-SE').format(Math.round(Number(n) || 0)) + ' kr';
@@ -56,22 +82,26 @@ export const visibleInFeed = (p) => !p.finance || !(p.finance.closed || p.financ
 
 // Kontroll av ett nytt/ändrat inlägg, gemensam för båda backends.
 export function normalizePostInput(input) {
-  const type = POST_TYPES[input.type] ? input.type : 'vanlig';
-  const isFinance = type === 'finansiering';
-  const categories = isFinance ? [FINANCE]
-    : type === 'resurs' ? [...new Set((input.categories || []).map((c) => c.trim()).filter((c) => c && c !== FINANCE))]
-    : [];
+  const kind = POST_TYPES[input.type] ? input.type : 'vanlig';
+  const clean = (xs) => [...new Set((xs || []).map((c) => c.trim()).filter(Boolean))];
+  const categories = kind === 'vanlig' ? clean(input.tags) : [];
   const slides = input.slides || [];
   const caption = (input.caption || '').trim();
   if (!slides.length && !caption) throw new Error('Lägg till minst en bild eller lite text.');
-  let finance = null;
-  if (isFinance) {
+  let finance = null, space = null;
+  if (kind === 'finansiering') {
     const total = Number(input.finance?.total);
     if (!(total > 0)) throw new Error('Ange hur mycket pengar som finns att söka.');
     const mode = input.finance?.mode === 'single' ? 'single' : 'split';
     finance = { total, mode, expiresAt: input.finance?.expiresAt || null };
   }
-  return { groupId: input.groupId || null, caption, slides, isResource: type !== 'vanlig', categories, finance };
+  if (kind === 'lokal') {
+    const functions = clean(input.space?.functions);
+    if (!functions.length) throw new Error('Välj minst en sak lokalen kan användas till.');
+    const cost = SPACE_COSTS[input.space?.cost] ? input.space.cost : 'gratis';
+    space = { functions, cost, price: cost === 'kostar' ? (input.space?.price || '').trim() || null : null };
+  }
+  return { groupId: input.groupId || null, caption, slides, kind, categories, isResource: kind !== 'vanlig' || categories.length > 0, finance, space };
 }
 
 export async function resizeImage(file, max = 1280, quality = 0.82) {

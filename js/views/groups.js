@@ -3,7 +3,25 @@ import { html, useState } from '../lib.js';
 import { api } from '../api/index.js';
 import { useStore, useAsync, go, attempt, refreshMe } from '../store.js';
 import { Icon, Avatar, Header, PostGrid, GroupRow, Modal, ImagePicker, Loading, ErrorBox } from '../ui.js';
-import { prettyUrl } from '../util.js';
+import { prettyUrl, countryNames } from '../util.js';
+
+// Land, region och stad för en grupp. Förslag hämtas från andra grupper.
+function PlaceFields({ value, onChange }) {
+  const groups = useAsync(() => api.listGroups(), []);
+  const uniq = (k, filter) => [...new Set((groups.data || []).filter(filter || (() => true)).map((g) => g[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'sv'));
+  const set = (k) => (e) => onChange({ ...value, [k]: e.target.value });
+  return html`<fieldset class="field place-fields">
+    <legend class="label">Var finns gruppen?</legend>
+    <label>Land<select value=${value.country} onChange=${set('country')}>
+      ${countryNames().map((c) => html`<option value=${c}>${c}</option>`)}</select></label>
+    <label>Region <small>(län, delstat …)</small><input list="dl-region" value=${value.region} onInput=${set('region')} placeholder="t.ex. Västra Götalands län" />
+      <datalist id="dl-region">${uniq('region', (g) => g.country === value.country).map((r) => html`<option value=${r} />`)}</datalist></label>
+    <label>Stad eller ort<input list="dl-city" required value=${value.city} onInput=${set('city')} placeholder="t.ex. Göteborg" />
+      <datalist id="dl-city">${uniq('city', (g) => g.country === value.country && (!value.region || g.region === value.region)).map((c) => html`<option value=${c} />`)}</datalist></label>
+    <small class="muted">Används för att visa flödet för en stad, region eller ett land.</small>
+  </fieldset>`;
+}
+const placeText = (g) => [g.city, g.region, g.country].filter(Boolean).join(', ');
 
 export function GroupView({ id }) {
   const s = useStore();
@@ -32,7 +50,7 @@ export function GroupView({ id }) {
         <div><b>${grp.highlights.length}</b><span>höjdpunkter</span></div>
       </div>
     </div>
-    <div class="profile-info"><strong>${grp.name}</strong>${grp.description && html`<p>${grp.description}</p>`}
+    <div class="profile-info"><strong>${grp.name}</strong>${placeText(grp) && html`<span class="group-place">${placeText(grp)}</span>`}${grp.description && html`<p>${grp.description}</p>`}
       ${grp.homepage && html`<a class="homepage" href=${grp.homepage} target="_blank" rel="noopener noreferrer">${prettyUrl(grp.homepage)}</a>`}</div>
     ${member && html`<div class="profile-actions">
       <a class="btn primary" href=${'#/ny?grupp=' + id}>Nytt inlägg</a>
@@ -100,6 +118,7 @@ export function GroupSettings({ id }) {
   const [name, setName] = useState(null);
   const [desc, setDesc] = useState(null);
   const [homepage, setHomepage] = useState(null);
+  const [where, setWhere] = useState(null);
   const [file, setFile] = useState(null);
   if (g.loading && !g.data) return html`<div class="page"><${Header} title="Inställningar" back /><${Loading} /></div>`;
   if (g.error) return html`<div class="page"><${Header} title="Inställningar" back /><${ErrorBox} error=${g.error} /></div>`;
@@ -108,7 +127,7 @@ export function GroupSettings({ id }) {
 
   async function save(e) {
     e.preventDefault();
-    if (await attempt(() => api.updateGroup(id, { name: name ?? grp.name, description: desc ?? grp.description, homepage: homepage ?? grp.homepage ?? '', avatarFile: file }), 'Sparat')) {
+    if (await attempt(() => api.updateGroup(id, { name: name ?? grp.name, description: desc ?? grp.description, homepage: homepage ?? grp.homepage ?? '', ...(where || { country: grp.country || 'Sverige', region: grp.region || '', city: grp.city || '' }), avatarFile: file }), 'Sparat')) {
       await refreshMe(); g.reload();
     }
   }
@@ -121,6 +140,7 @@ export function GroupSettings({ id }) {
       <label>Namn<input required value=${name ?? grp.name} onInput=${(e) => setName(e.target.value)} /></label>
       <label>Beskrivning<textarea rows="3" value=${desc ?? grp.description} onInput=${(e) => setDesc(e.target.value)}></textarea></label>
       <label>Hemsida <small>(valfri)</small><input inputmode="url" autocapitalize="off" value=${homepage ?? grp.homepage ?? ''} onInput=${(e) => setHomepage(e.target.value)} placeholder="https://…" /></label>
+      <${PlaceFields} value=${where || { country: grp.country || 'Sverige', region: grp.region || '', city: grp.city || '' }} onChange=${setWhere} />
       <button class="btn primary block">Spara</button>
     </form>
 
@@ -154,12 +174,13 @@ export function NewGroup({ next }) {
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [homepage, setHomepage] = useState('');
+  const [where, setWhere] = useState({ country: 'Sverige', region: '', city: '' });
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
-    const g = await attempt(() => api.createGroup({ name, description: desc, homepage, avatarFile: file }), 'Gruppen är skapad – du är admin');
+    const g = await attempt(() => api.createGroup({ name, description: desc, homepage, ...where, avatarFile: file }), 'Gruppen är skapad – du är admin');
     setBusy(false);
     if (g) { await refreshMe(); go(next ? (next === '/ny' ? '/ny?grupp=' + g.id : next) : '/grupp/' + g.id); }
   }
@@ -170,6 +191,7 @@ export function NewGroup({ next }) {
       <label>Namn<input required value=${name} onInput=${(e) => setName(e.target.value)} placeholder="t.ex. Gråvattengruppen Gottsunda" /></label>
       <label>Beskrivning<textarea rows="3" value=${desc} onInput=${(e) => setDesc(e.target.value)} placeholder="Vad gör ni? Vilka är ni?"></textarea></label>
       <label>Hemsida <small>(valfri)</small><input inputmode="url" autocapitalize="off" value=${homepage} onInput=${(e) => setHomepage(e.target.value)} placeholder="https://…" /></label>
+      <${PlaceFields} value=${where} onChange=${setWhere} />
       <p class="hint">Du blir gruppens admin och kan lägga till fler admins under gruppinställningar. Alla kan gå med i gruppen.</p>
       <button class="btn primary block" disabled=${busy}>${busy ? 'Skapar…' : 'Skapa grupp'}</button>
     </form>

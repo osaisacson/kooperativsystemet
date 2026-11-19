@@ -1,8 +1,8 @@
 # Kooperativsystemet
 
 En app för grupper som arbetar med småskaliga omställningar av vatten, avfall, energi, ekonomi med mera.
-Inlägg hör till grupper. Inlägg kan läggas i **gemensamma resurser** (metoder, lokaler, finansiering …), och
-**finansieringsinlägg** gör det möjligt att dela ut pengar som andra söker i kommentarerna.
+Inlägg hör till grupper. Inlägg kan vara vanliga inlägg (med ämnen), **lokaler** att låna eller hyra, eller
+**finansiering** som andra grupper kan söka i kommentarerna.
 
 - Ingen byggprocess – vanliga filer (HTML, CSS, JavaScript med [Preact](https://preactjs.com) + htm från CDN).
 - Backend: [Supabase](https://supabase.com) (gratisnivån räcker). Utan Supabase körs appen i **demoläge** där allt sparas i webbläsaren.
@@ -14,7 +14,7 @@ Inlägg hör till grupper. Inlägg kan läggas i **gemensamma resurser** (metode
 python3 -m http.server 5173
 ```
 
-Öppna http://localhost:5173. Skapa ett konto (det stannar i din webbläsare). Exempelgrupper och inlägg finns redan.
+Öppna http://localhost:5173. Lägg till `?demo` i adressen för att prova demoläget även när Supabase är inkopplat. Skapa ett konto (det stannar i din webbläsare). Exempelgrupper och inlägg finns redan.
 Knappen **Återställ** överst i flödet tömmer demodatan.
 
 ## Koppla in en riktig, gratis backend (Supabase) – ca 10 minuter
@@ -45,7 +45,9 @@ Lägg upp hela mappen. I Supabase, lägg till adressen under **Authentication �
 | Höjdpunkter | Alla medlemmar kan skapa och redigera gruppens höjdpunkter. |
 | Inlägg | Bara medlemmar kan posta i en grupp. Inlägg utan grupp går att göra men användaren knuffas mot grupper. Den som postat kan alltid redigera/ta bort; andra kan *be om* ändring eller borttagning (blir ett meddelande). Gruppadmins kan ta bort inlägg i sin grupp. |
 | Aktivitet | Nytt inlägg eller ny kommentar flyttar gruppen först i raden högst upp. |
-| Gemensamma resurser | Kryssruta vid uppladdning. Kategorierna *Finansiering, Lokaler, Metoder* finns från början; nya kan skapas vid uppladdning. |
+| Plats | Grupper anger land, region och stad. Överst i appen väljer man om flödet ska visa en stad, en region, ett land eller hela världen. Standard är staden där de flesta av ens grupper finns. |
+| Flikar | **Flöde** (allt), **Finansiering** (med summan som går att söka just nu) och **Lokaler** (filtrera på vad lokalen kan användas till och vad den kostar). Plustecknet vid varje flik skapar ett inlägg av den typen; plustecknet i menyn längst ner låter en välja typ. |
+| Ämnen | Vanliga inlägg kan märkas med ämnen (Energi, Byggmetod, Off-grid …) så att andra hittar dem. Nya ämnen kan skapas. |
 | Finansiering | Totalbelopp, *en mottagare* eller *delbelopp*, slutdatum (kan stängas manuellt). Man söker alltid för en grupp man är med i; ansökan visas som gruppens kommentar ("via" personen) med märket **Ansökt**, belopp och swishnummer (bankkonto över 5 000 kr). Utbetalningsuppgiften syns bara för sökande och givare. **Bevilja** → märket blir **Beviljad** och en rad dyker upp i *Att göra* (✓-ikonen uppe till höger). Bockas den av blir märket **Utbetald** och förloppsmätaren fylls. |
 | Admin saknas | Lämnar sista admin blir den som varit med längst admin direkt. Har ingen admin loggat in på ett år läggs ett mejl till admins i tabellen `email_outbox`; efter 30 dagar utan reaktion tar den medlem som varit med längst över. |
 | Kommentarer | Kan besvaras i trådar, som på Reddit. Den man svarar får en notis. |

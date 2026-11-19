@@ -42,7 +42,6 @@ function BottomNav({ r }) {
     ${item('#/', 'Hem', !a, html`<${Icon} name="home" size=${26} />`)}
     ${item('#/sok', 'Sök', a === 'sok', html`<${Icon} name="search" size=${26} />`)}
     ${item('#/ny', 'Nytt inlägg', a === 'ny', html`<${Icon} name="plus" size=${26} />`)}
-    ${item('#/notiser', 'Notiser', a === 'notiser', html`<${Icon} name="heart" size=${26} />`, s.badges.notifications)}
     ${item('#/profil/' + s.me.id, 'Min profil', a === 'profil' && b === s.me.id, html`<span class="nav-avatar"><${Avatar} src=${s.me.avatar_url} name=${s.me.name} size=${26} /></span>`)}
   </nav>`;
 }
@@ -66,7 +65,7 @@ function App() {
   }, []);
   if (!ready) return html`<div class="splash">…</div>`;
   return html`<div class="app">
-    ${s.recovering ? html`<${NewPassword} />` : s.me ? html`<main key=${r.path}>${route(r)}</main><${BottomNav} r=${r} />` : html`<${AuthView} />`}
+    ${s.recovering ? html`<${NewPassword} />` : s.me ? html`<main key=${r.path + '?' + r.query}>${route(r)}</main><${BottomNav} r=${r} />` : html`<${AuthView} />`}
     ${s.toast && html`<div class="toast" role="status">${s.toast}</div>`}
   </div>`;
 }

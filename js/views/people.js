@@ -82,18 +82,22 @@ export function Search({ tab: initialTab }) {
   const [dq, setDq] = useState('');
   const [tab, setTab] = useState(TABS.some(([k]) => k === initialTab) ? initialTab : 'inlagg');
   useEffect(() => { const t = setTimeout(() => setDq(q), 250); return () => clearTimeout(t); }, [q]);
-  const res = useAsync(() => (tab === 'inlagg' ? api.listPosts({ q: dq }) : tab === 'personer' ? api.listUsers(dq) : api.listGroups(dq)), [tab, dq]);
+  // Resultaten märks med vilken flik de hör till, så att gamla resultat aldrig ritas i fel flik.
+  const res = useAsync(async () => ({
+    tab, items: await (tab === 'inlagg' ? api.listPosts({ q: dq }) : tab === 'personer' ? api.listUsers(dq) : api.listGroups(dq)),
+  }), [tab, dq]);
   const placeholder = { inlagg: 'Sök bland alla inlägg', personer: 'Sök bland alla personer', grupper: 'Sök bland alla grupper' }[tab];
+  const items = res.data?.tab === tab ? res.data.items : null;
   return html`<div class="page">
     <div class="searchbar"><input type="search" value=${q} onInput=${(e) => setQ(e.target.value)} placeholder=${placeholder} aria-label=${placeholder} /></div>
     <div class="tabs" role="tablist">${TABS.map(([k, label]) => html`<button role="tab" aria-selected=${tab === k} class=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${label}</button>`)}</div>
-    ${res.loading && !res.data ? html`<${Loading} />` : res.error ? html`<${ErrorBox} error=${res.error} />`
-      : tab === 'inlagg' ? html`<${PostGrid} posts=${res.data} showAuthor empty="Inga inlägg hittades." />`
-      : res.data.length === 0 ? html`<p class="empty">Inget hittades.</p>`
-      : html`<div class="list">${tab === 'personer'
-          ? res.data.map((u) => html`<${UserRow} key=${u.id} user=${u} />`)
-          : [html`<a class="row" href="#/ny-grupp"><span class="avatar plus">+</span><span class="row-main"><strong>Skapa ny grupp</strong></span></a>`,
-             ...res.data.map((g) => html`<${GroupRow} key=${g.id} group=${g} onChange=${res.reload} />`)]}</div>`}
+    ${res.error ? html`<${ErrorBox} error=${res.error} />` : !items ? html`<${Loading} />`
+      : tab === 'inlagg' ? html`<${PostGrid} posts=${items} showAuthor empty="Inga inlägg hittades." />`
+      : tab === 'personer'
+        ? (items.length ? html`<div class="list">${items.map((u) => html`<${UserRow} key=${u.id} user=${u} />`)}</div>` : html`<p class="empty">Inget hittades.</p>`)
+        : html`<div class="list">
+            <a class="row" href="#/ny-grupp"><span class="avatar plus">+</span><span class="row-main"><strong>Skapa ny grupp</strong></span></a>
+            ${items.map((g) => html`<${GroupRow} key=${g.id} group=${g} onChange=${res.reload} />`)}</div>`}
   </div>`;
 }
 

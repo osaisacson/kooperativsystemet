@@ -1,10 +1,9 @@
 // Flödet, enskilt inlägg och skapa/redigera inlägg.
 import { html, useState, useEffect } from '../lib.js';
 import { api } from '../api/index.js';
-import { APP_NAME } from '../config.js';
-import { useStore, useAsync, go, attempt, refreshBadges } from '../store.js';
-import { Icon, Avatar, Count, Header, PostCard, Comments, Loading, ErrorBox } from '../ui.js';
-import { FINANCE, PAYOUT_BANK_LIMIT, POST_TYPES, postType, fmtKr } from '../util.js';
+import { useStore, useAsync, go, attempt, refreshBadges, setPlace } from '../store.js';
+import { Icon, Avatar, Count, Header, PostCard, Comments, Loading, ErrorBox, Sheet } from '../ui.js';
+import { PAYOUT_BANK_LIMIT, POST_TYPES, DEFAULT_FUNCTIONS, SPACE_COSTS, PLACE_LEVELS, postType, placeLabel, inPlace, fmtKr } from '../util.js';
 
 // Tips om att spara appen på hemskärmen – visas på mobilen tills man stänger det.
 function InstallHint() {
@@ -24,20 +23,71 @@ function InstallHint() {
   </div>`;
 }
 
+const PLUS = html`<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+
+// Platsväljaren överst: stad → region → land → hela världen, plus andra städer där det finns grupper.
+function PlaceSwitcher({ groups }) {
+  const s = useStore();
+  const [open, setOpen] = useState(false);
+  const place = s.place || { level: 'world' };
+  const base = place.level === 'world' ? null : place;
+  const options = [];
+  if (base?.city) options.push({ level: 'city', city: base.city, region: base.region, country: base.country });
+  if (base?.region) options.push({ level: 'region', region: base.region, country: base.country });
+  if (base?.country) options.push({ level: 'country', country: base.country });
+  options.push({ level: 'world' });
+  const seen = new Set(options.filter((o) => o.level === 'city').map((o) => o.city.toLowerCase()));
+  const others = [];
+  for (const g of groups) {
+    if (!g.city || seen.has(g.city.toLowerCase())) continue;
+    seen.add(g.city.toLowerCase());
+    others.push({ level: 'city', city: g.city, region: g.region, country: g.country });
+  }
+  others.sort((a, b) => a.city.localeCompare(b.city, 'sv'));
+  const same = (a, b) => a.level === b.level && placeLabel(a) === placeLabel(b);
+  const pick = (o) => { setPlace(o); setOpen(false); };
+  const row = (o) => html`<button class=${'sheet-item place-opt' + (same(o, place) ? ' on' : '')} onClick=${() => pick(o)}>
+    <span>${placeLabel(o)}</span>${o.level !== 'world' && html`<small class="muted">${PLACE_LEVELS[o.level]}</small>`}</button>`;
+  return html`<button class="place-btn" onClick=${() => setOpen(true)} aria-label=${`Visar ${placeLabel(place)}. Byt plats`}>
+      <span class="place-name">${placeLabel(place)}<span class="chev" aria-hidden="true">▾</span></span>
+      <small class="place-hint">${place.level === 'world' ? 'välj stad, region eller land' : `visar ${PLACE_LEVELS[place.level]} · byt till region eller land`}</small>
+    </button>
+    ${open && html`<${Sheet} onClose=${() => setOpen(false)}>
+      ${options.map(row)}
+      ${others.length > 0 && html`<div class="sheet-label">Andra städer</div>${others.map(row)}`}
+    <//>`}`;
+}
+
+const TABS = [['flode', 'Flöde'], ['finansiering', 'Finansiering'], ['lokal', 'Lokaler']];
+
 export function Home() {
   const s = useStore();
-  const [tab, setTab] = useState('flode');
-  const [cat, setCat] = useState(null);
+  const [tab, setTab] = useState(() => { try { return sessionStorage.getItem('tab') || 'flode'; } catch { return 'flode'; } });
+  const [fn, setFn] = useState(null);
+  const [cost, setCost] = useState(null);
   const groups = useAsync(() => api.listGroups(), []);
-  const cats = useAsync(() => api.listCategories(), []);
-  const posts = useAsync(() => api.listPosts({ resources: tab === 'resurser', category: tab === 'resurser' ? cat : null, feed: true }), [tab, cat]);
+  const posts = useAsync(() => api.listPosts({ feed: true }), []);
+  const place = s.place || { level: 'world' };
   const fresh = (g) => Date.now() - new Date(g.last_activity_at) < 24 * 3600e3;
+  const choose = (t) => { setTab(t); try { sessionStorage.setItem('tab', t); } catch {} };
+
+  const here = (posts.data || []).filter((p) => inPlace(p.group, place));
+  const finance = here.filter((p) => postType(p) === 'finansiering');
+  const spaces = here.filter((p) => postType(p) === 'lokal');
+  const available = finance.reduce((sum, p) => sum + (p.finance?.open ? p.finance.remaining : 0), 0);
+  const functions = [...new Set(spaces.flatMap((p) => p.space_functions || []))].sort((a, b) => a.localeCompare(b, 'sv'));
+  const shown = tab === 'finansiering' ? finance
+    : tab === 'lokal' ? spaces.filter((p) => (!fn || p.space_functions?.includes(fn)) && (!cost || p.space_cost === cost))
+    : here;
+  const localGroups = (groups.data || []).filter((g) => inPlace(g, place));
+  const where = placeLabel(place);
 
   return html`<div class="page">
     <header class="topbar brand">
-      <h1 class="logo">${APP_NAME}</h1>
+      <${PlaceSwitcher} groups=${groups.data || []} />
       <div class="topbar-side right">
         ${s.badges.todos > 0 && html`<a class="iconbtn" href="#/att-gora" aria-label="Att göra"><${Icon} name="check" /><${Count} n=${s.badges.todos} /></a>`}
+        <a class="iconbtn" href="#/notiser" aria-label="Notiser"><${Icon} name="bell" /><${Count} n=${s.badges.notifications} /></a>
         <a class="iconbtn" href="#/meddelanden" aria-label="Meddelanden"><${Icon} name="chat" /><${Count} n=${s.badges.messages} /></a>
       </div>
     </header>
@@ -47,26 +97,35 @@ export function Home() {
     <${InstallHint} />
     <div class="stories">
       <a class="story" href="#/ny-grupp"><span class="story-new">+</span><span class="story-name">Ny grupp</span></a>
-      ${(groups.data || []).map((g) => html`<a class="story" href=${'#/grupp/' + g.id} key=${g.id}>
+      ${localGroups.map((g) => html`<a class="story" href=${'#/grupp/' + g.id} key=${g.id}>
         <span class=${'story-ring' + (fresh(g) ? ' fresh' : '')}><${Avatar} src=${g.avatar_url} name=${g.name} size=${60} /></span>
         <span class="story-name">${g.name}</span></a>`)}
     </div>
 
     <div class="filterbar" role="tablist">
-      <button role="tab" aria-selected=${tab === 'flode'} class=${tab === 'flode' ? 'on' : ''} onClick=${() => setTab('flode')}>Flöde</button>
-      <button role="tab" aria-selected=${tab === 'resurser'} class=${tab === 'resurser' ? 'on' : ''} onClick=${() => setTab('resurser')}>Gemensamma resurser</button>
+      ${TABS.map(([k, label]) => html`<button role="tab" aria-selected=${tab === k} class=${tab === k ? 'on' : ''} onClick=${() => choose(k)}>
+        ${label}${k === 'finansiering' && available > 0 ? html`<small class="tab-sum">${fmtKr(available)}</small>` : ''}</button>`)}
     </div>
-    ${tab === 'resurser' && html`<div class="resource-bar">
-      <div class="chips">
-        <button class=${'chip' + (!cat ? ' on' : '')} onClick=${() => setCat(null)}>Alla</button>
-        ${(cats.data || []).map((c) => html`<button class=${'chip' + (cat === c ? ' on' : '')} onClick=${() => setCat(c)}>${c}</button>`)}
+    <div class="tab-head">
+      <div class="tab-info">
+        ${tab === 'flode' && html`<span class="muted small">Allt från grupperna i ${where}</span>`}
+        ${tab === 'finansiering' && html`<span class="small"><strong>${fmtKr(available)}</strong> <span class="muted">går att söka i ${where} just nu</span></span>`}
+        ${tab === 'lokal' && html`<div class="chips tight">
+            <button class=${'chip' + (!fn ? ' on' : '')} onClick=${() => setFn(null)}>Alla</button>
+            ${functions.map((f) => html`<button class=${'chip' + (fn === f ? ' on' : '')} onClick=${() => setFn(fn === f ? null : f)}>${f}</button>`)}
+          </div>`}
       </div>
-      <a class="chip-add" href="#/ny?typ=resurs" aria-label="Lägg upp en gemensam resurs" title="Lägg upp en gemensam resurs"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></a>
+      <a class="chip-add" href=${'#/ny?typ=' + (tab === 'flode' ? 'vanlig' : tab)} aria-label=${{ flode: 'Nytt inlägg', finansiering: 'Ny finansiering', lokal: 'Ny lokal' }[tab]}>${PLUS}</a>
+    </div>
+    ${tab === 'lokal' && html`<div class="chips tight cost-filter">
+      <button class=${'chip small' + (!cost ? ' on' : '')} onClick=${() => setCost(null)}>Alla kostnader</button>
+      ${Object.entries(SPACE_COSTS).map(([k, label]) => html`<button class=${'chip small' + (cost === k ? ' on' : '')} onClick=${() => setCost(cost === k ? null : k)}>${label}</button>`)}
     </div>`}
 
     ${posts.loading && !posts.data ? html`<${Loading} />` : posts.error ? html`<${ErrorBox} error=${posts.error} />`
-      : posts.data.length === 0 ? html`<p class="empty">Inget här än.</p>`
-      : posts.data.map((p) => html`<${PostCard} key=${p.id} post=${p} onChange=${posts.reload} />`)}
+      : shown.length === 0 ? html`<p class="empty">${{ flode: 'Inga inlägg', finansiering: 'Ingen finansiering att söka', lokal: 'Inga lokaler' }[tab]} i ${where} än.
+          ${place.level !== 'world' && html`<br /><span class="small">Tryck på <b>${where}</b> högst upp för att se region, land eller hela världen.</span>`}</p>`
+      : shown.map((p) => html`<${PostCard} key=${p.id} post=${p} onChange=${posts.reload} />`)}
   </div>`;
 }
 
@@ -99,9 +158,10 @@ const plusDays = (d) => new Date(Date.now() + d * 864e5).toISOString().slice(0, 
 
 const TYPE_HELP = {
   vanlig: 'Syns i flödet, i gruppen och på din profil.',
-  finansiering: 'Pengar som andra kan söka. Hamnar också under Gemensamma resurser → Finansiering.',
-  resurs: 'Något andra kan ha nytta av: en byggmetod, en avloppslösning, ett sätt att producera energi, en lokal att låna … Hamnar också under fliken Gemensamma resurser, där man kan filtrera på kategori.',
+  finansiering: 'Pengar som andra grupper kan söka. Syns under Finansiering.',
+  lokal: 'En lokal andra kan låna, använda mot en gentjänst eller hyra. Syns under Lokaler.',
 };
+const TYPE_TITLE = { vanlig: 'Nytt inlägg', finansiering: 'Ny finansiering', lokal: 'Ny lokal' };
 
 function FinanceSteps() {
   return html`<div class="steps">
@@ -118,20 +178,45 @@ function FinanceSteps() {
   </div>`;
 }
 
+// Chips att välja bland, plus ett fält för att lägga till nya.
+function ChipPicker({ options, selected, onChange, placeholder }) {
+  const [extra, setExtra] = useState([]);
+  const [text, setText] = useState('');
+  const all = [...new Set([...options, ...extra, ...selected])];
+  const toggle = (c) => onChange(selected.includes(c) ? selected.filter((x) => x !== c) : [...selected, c]);
+  function add() {
+    const c = text.trim().replace(/^./, (m) => m.toUpperCase());
+    setText('');
+    if (!c) return;
+    const existing = all.find((x) => x.toLowerCase() === c.toLowerCase()) || c;
+    if (!all.includes(existing)) setExtra((xs) => [...xs, existing]);
+    if (!selected.includes(existing)) onChange([...selected, existing]);
+  }
+  return html`<div>
+    <div class="chips wrap">${all.map((c) => html`<button type="button" class=${'chip' + (selected.includes(c) ? ' on' : '')} onClick=${() => toggle(c)}>${c}</button>`)}</div>
+    <div class="inline"><input value=${text} onInput=${(e) => setText(e.target.value)} placeholder=${placeholder}
+      onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} />
+      <button type="button" class="btn small" onClick=${add} disabled=${!text.trim()}>Lägg till</button></div>
+  </div>`;
+}
+
 export function Compose({ groupId: initialGroup, type: initialType, editId }) {
   const s = useStore();
   const editing = !!editId;
+  const fixedType = editing || !!POST_TYPES[initialType];   // från en flik: typen är redan vald
   const myGroups = s.myGroups;
-  const cats = useAsync(() => api.listCategories(), []);
+  const tagOptions = useAsync(() => api.listCategories(), []);
+  const spaceOptions = useAsync(async () => [...new Set([...DEFAULT_FUNCTIONS, ...(await api.listPosts({ kind: 'lokal' })).flatMap((p) => p.space_functions || [])])], []);
   const [loaded, setLoaded] = useState(!editing);
   const [type, setType] = useState(POST_TYPES[initialType] ? initialType : 'vanlig');
   const [slides, setSlides] = useState([]);
   const [caption, setCaption] = useState('');
   const [groupId, setGroupId] = useState(initialGroup && s.memberOf.has(initialGroup) ? initialGroup : myGroups[0]?.id || null);
   const [personal, setPersonal] = useState(false);
-  const [selCats, setSelCats] = useState([]);
-  const [extraCats, setExtraCats] = useState([]);
-  const [newCat, setNewCat] = useState('');
+  const [tags, setTags] = useState([]);
+  const [functions, setFunctions] = useState([]);
+  const [cost, setCost] = useState('gratis');
+  const [price, setPrice] = useState('');
   const [finTotal, setFinTotal] = useState('');
   const [finMode, setFinMode] = useState('split');
   const [finEnd, setFinEnd] = useState(plusDays(30));
@@ -146,7 +231,8 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
       setType(postType(p));
       setSlides(p.slides.map((x) => ({ key: x.id, id: x.id, image_url: x.image_url, preview: x.image_url, text: x.text || '' })));
       setCaption(p.caption || ''); setGroupId(p.group_id); setPersonal(!p.group_id);
-      setSelCats((p.categories || []).filter((c) => c !== FINANCE));
+      setTags(p.categories || []);
+      setFunctions(p.space_functions || []); setCost(p.space_cost || 'gratis'); setPrice(p.space_price || '');
       if (p.fin_total != null) {
         setHadFinance(true); setFinTotal(String(p.fin_total)); setFinMode(p.fin_mode);
         setFinEnd(p.fin_expires_at ? p.fin_expires_at.slice(0, 10) : '');
@@ -157,8 +243,6 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
 
   const noGroups = myGroups.length === 0;
   const isPersonal = personal || noGroups || !groupId;
-  const allCats = [...new Set([...(cats.data || []), ...extraCats])].filter((c) => c !== FINANCE);
-
   const update = (i, patch) => setSlides((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const remove = (i) => setSlides((xs) => xs.filter((_, j) => j !== i));
   const move = (i, d) => setSlides((xs) => { const a = [...xs]; [a[i], a[i + d]] = [a[i + d], a[i]]; return a; });
@@ -167,15 +251,6 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
     setSlides((xs) => [...xs, ...files.map((file) => ({ key: crypto.randomUUID(), file, preview: URL.createObjectURL(file), text: '' }))]);
     e.target.value = '';
   }
-  const toggleCat = (c) => setSelCats((xs) => (xs.includes(c) ? xs.filter((x) => x !== c) : [...xs, c]));
-  function addCat() {
-    const c = newCat.trim().replace(/^./, (m) => m.toUpperCase());
-    if (!c || c.toLowerCase() === FINANCE.toLowerCase()) return setNewCat('');
-    const existing = allCats.find((x) => x.toLowerCase() === c.toLowerCase()) || c;
-    if (!allCats.includes(existing)) setExtraCats((xs) => [...xs, existing]);
-    if (!selCats.includes(existing)) setSelCats((xs) => [...xs, existing]);
-    setNewCat('');
-  }
 
   async function submit(e) {
     e.preventDefault(); setErr('');
@@ -183,11 +258,12 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
     setBusy(true);
     try {
       const payload = {
-        type, groupId: isPersonal ? null : groupId, caption, categories: selCats,
+        type, groupId: isPersonal ? null : groupId, caption, tags,
         slides: slides.map(({ id, file, image_url, text }) => ({ id, file, image_url, text })),
         finance: type === 'finansiering'
           ? { total: Number(String(finTotal).replace(/\s/g, '')), mode: finMode, expiresAt: finEnd ? new Date(finEnd + 'T23:59:59').toISOString() : null }
           : null,
+        space: type === 'lokal' ? { functions, cost, price } : null,
       };
       if (editing) { await api.updatePost(editId, payload); go('/post/' + editId); }
       else { const id = await api.createPost(payload); refreshBadges(); go('/post/' + id); }
@@ -197,16 +273,15 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
   if (!loaded) return html`<div class="page"><${Header} title="Redigera" back />${err ? html`<p class="empty error">${err}</p>` : html`<${Loading} />`}</div>`;
 
   return html`<div class="page">
-    <${Header} title=${editing ? 'Redigera inlägg' : 'Nytt inlägg'} back />
+    <${Header} title=${editing ? 'Redigera inlägg' : fixedType ? TYPE_TITLE[type] : 'Nytt inlägg'} back />
     <form class="form pad" onSubmit=${submit}>
 
-      <fieldset class="field types">
+      ${!fixedType && html`<fieldset class="field types">
         <legend class="label">Typ av post</legend>
         ${Object.entries(POST_TYPES).map(([k, label]) => html`<label class=${'radio type' + (type === k ? ' on' : '')} key=${k}>
-          <input type="radio" name="type" value=${k} checked=${type === k} disabled=${hadFinance && k !== 'finansiering'} onChange=${() => setType(k)} />
+          <input type="radio" name="type" value=${k} checked=${type === k} onChange=${() => setType(k)} />
           <span><strong>${label}</strong><small>${TYPE_HELP[k]}</small></span></label>`)}
-        ${hadFinance && html`<small class="muted">Ett finansieringsinlägg kan inte byta typ.</small>`}
-      </fieldset>
+      </fieldset>`}
 
       ${type === 'finansiering' && html`<section class="field fin-form">
         <${FinanceSteps} />
@@ -219,12 +294,13 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
         <label>Ligger uppe till och med<input type="date" value=${finEnd} min=${plusDays(0)} onInput=${(e) => setFinEnd(e.target.value)} /></label>
       </section>`}
 
-      ${type === 'resurs' && html`<section class="field">
-        <div class="label small">Kategorier</div>
-        <div class="chips wrap">${allCats.map((c) => html`<button type="button" class=${'chip' + (selCats.includes(c) ? ' on' : '')} onClick=${() => toggleCat(c)}>${c}</button>`)}</div>
-        <div class="inline"><input value=${newCat} onInput=${(e) => setNewCat(e.target.value)} placeholder="Ny kategori…"
-          onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); addCat(); } }} />
-          <button type="button" class="btn small" onClick=${addCat} disabled=${!newCat.trim()}>Lägg till</button></div>
+      ${type === 'lokal' && html`<section class="field">
+        <div class="label">Vad kan lokalen användas till?</div>
+        <${ChipPicker} options=${spaceOptions.data || DEFAULT_FUNCTIONS} selected=${functions} onChange=${setFunctions} placeholder="Något annat…" />
+        <div class="label">Vad kostar det?</div>
+        ${Object.entries(SPACE_COSTS).map(([k, label]) => html`<label class="radio" key=${k}>
+          <input type="radio" name="cost" checked=${cost === k} onChange=${() => setCost(k)} /><span>${label}</span></label>`)}
+        ${cost === 'kostar' && html`<label>Pris<input value=${price} onInput=${(e) => setPrice(e.target.value)} placeholder="t.ex. 200 kr per dag" /></label>`}
       </section>`}
 
       <section class="field">
@@ -259,7 +335,13 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
 
       <label class="field">Text till inlägget
         <textarea rows="4" value=${caption} onInput=${(e) => setCaption(e.target.value)}
-          placeholder=${type === 'finansiering' ? 'Vad kan pengarna sökas för? Vem kan söka?' : type === 'resurs' ? 'Beskriv resursen så att andra kan använda den…' : 'Berätta vad ni gjort, vad ni lärt er eller vad ni behöver…'}></textarea></label>
+          placeholder=${{ finansiering: 'Vad kan pengarna sökas för? Vem kan söka?', lokal: 'Var ligger lokalen, när går den att använda och hur bokar man?' }[type] || 'Berätta vad ni gjort, vad ni lärt er eller vad ni behöver…'}></textarea></label>
+
+      ${type === 'vanlig' && html`<section class="field">
+        <div class="label">Kan andra lära sig något av det här?</div>
+        <small class="muted">Lägg till ämnen så att andra som jobbar med samma sak hittar inlägget.</small>
+        <${ChipPicker} options=${tagOptions.data || []} selected=${tags} onChange=${setTags} placeholder="Nytt ämne, t.ex. Solel…" />
+      </section>`}
 
       ${err && html`<p class="error">${err}</p>`}
       <button class="btn primary block" disabled=${busy}>${busy ? 'Sparar…' : editing ? 'Spara ändringar' : 'Publicera'}</button>

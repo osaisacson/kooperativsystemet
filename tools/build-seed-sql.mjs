@@ -14,19 +14,22 @@ const act = activityHours();
 let sql = `-- Exempeldata. Skapad av tools/build-seed-sql.mjs – ändra i js/seed.js och kör skriptet igen.
 -- Exempelanvändarna har inga inloggningar; skapa egna konton i appen för att testa.\n\n`;
 
+sql += rows('categories', ['name'], SEED.categories.map((c) => [lit(c)])).replace(/;\n$/, ' on conflict (name) do nothing;\n');
+
 sql += rows('profiles', ['id', 'name', 'created_at', 'last_seen_at'],
   SEED.profiles.map((p) => [lit(p.id), lit(p.name), ago(p.h), ago(p.seen)]));
 
 // created_by sätts efteråt så att triggern inte lägger till skaparen som admin två gånger
-sql += rows('groups', ['id', 'name', 'description', 'avatar_url', 'created_at', 'last_activity_at'],
-  SEED.groups.map((g) => [lit(g.id), lit(g.name), lit(g.description), lit(g.avatar_url), ago(g.h), ago(act.groups[g.id] ?? g.h)]));
+sql += rows('groups', ['id', 'name', 'description', 'avatar_url', 'country', 'region', 'city', 'created_at', 'last_activity_at'],
+  SEED.groups.map((g) => [lit(g.id), lit(g.name), lit(g.description), lit(g.avatar_url), lit(g.country), lit(g.region), lit(g.city), ago(g.h), ago(act.groups[g.id] ?? g.h)]));
 sql += SEED.groups.map((g) => `update public.groups set created_by = ${lit(g.created_by)} where id = ${lit(g.id)};`).join('\n') + '\n';
 
 sql += rows('group_members', ['group_id', 'user_id', 'role', 'joined_at'],
   SEED.members.map((m) => [lit(m.g), lit(m.u), lit(m.role || 'member'), ago(m.h)]));
 
-sql += rows('posts', ['id', 'author_id', 'group_id', 'caption', 'is_resource', 'categories', 'fin_total', 'fin_mode', 'fin_expires_at', 'created_at', 'updated_at', 'last_activity_at'],
-  SEED.posts.map((p) => [lit(p.id), lit(p.author_id), lit(p.group_id), lit(p.caption), lit(!!(p.resource || p.categories?.length)), arr(p.categories, 'text'),
+sql += rows('posts', ['id', 'author_id', 'group_id', 'caption', 'kind', 'is_resource', 'categories', 'space_functions', 'space_cost', 'fin_total', 'fin_mode', 'fin_expires_at', 'created_at', 'updated_at', 'last_activity_at'],
+  SEED.posts.map((p) => [lit(p.id), lit(p.author_id), lit(p.group_id), lit(p.caption), lit(p.kind || 'vanlig'), lit(!!(p.kind || p.tags?.length)), arr(p.tags, 'text'),
+    arr(p.space_functions, 'text'), lit(p.space_cost ?? null),
     lit(p.fin_total ?? null), lit(p.fin_mode ?? null), p.expires_days != null ? `now() + interval '${p.expires_days} days'` : 'null',
     ago(p.h), ago(p.h), ago(act.posts[p.id])]));
 

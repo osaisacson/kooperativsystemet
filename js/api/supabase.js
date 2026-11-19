@@ -42,7 +42,7 @@ async function upload(file, max = 1280) {
 }
 
 const PROFILE = 'id,name,avatar_url';
-const POST_SELECT = `*, author:profiles(${PROFILE}), group:groups(id,name,avatar_url), slides:post_slides(id,position,image_url,text), comments(id,applied_amount,status,body,created_at,parent_id,author:profiles(id,name),group:groups(id,name))`;
+const POST_SELECT = `*, author:profiles(${PROFILE}), group:groups(id,name,avatar_url,city,region,country), slides:post_slides(id,position,image_url,text), comments(id,applied_amount,status,body,created_at,parent_id,author:profiles(id,name),group:groups(id,name))`;
 
 function shapePost(p) {
   const cs = p.comments || [];
@@ -53,6 +53,7 @@ function shapePost(p) {
     first_comment: first ? { body: first.body, author: first.author, group: first.group } : null,
   };
 }
+const place = ({ country, region, city }) => ({ country: (country || '').trim() || null, region: (region || '').trim() || null, city: (city || '').trim() || null });
 async function ensureCategories(cats) {
   if (cats.length) ok(await sb.from('categories').upsert(cats.map((name) => ({ name })), { onConflict: 'name', ignoreDuplicates: true }));
 }
@@ -134,11 +135,11 @@ export const api = {
   // ---- Grupper ----
   async listGroups(q = '') {
     let query = sb.from('groups').select('*, group_members(user_id)').order('last_activity_at', { ascending: false });
-    if (q.trim()) query = query.or(`name.ilike.%${q.trim()}%,description.ilike.%${q.trim()}%`);
+    if (q.trim()) query = query.or(`name.ilike.%${q.trim()}%,description.ilike.%${q.trim()}%,city.ilike.%${q.trim()}%,region.ilike.%${q.trim()}%,country.ilike.%${q.trim()}%`);
     return ok(await query).map(({ group_members, ...g }) => ({ ...g, member_count: group_members.length, is_member: group_members.some((m) => m.user_id === meId) }));
   },
   async myGroups() {
-    const rows = ok(await sb.from('group_members').select('role, group:groups(id,name,avatar_url)').eq('user_id', needMe()));
+    const rows = ok(await sb.from('group_members').select('role, group:groups(id,name,avatar_url,city,region,country)').eq('user_id', needMe()));
     return rows.map((r) => ({ ...r.group, role: r.role })).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
   },
   async getGroup(id) {
@@ -150,17 +151,18 @@ export const api = {
       highlights: highlights.sort((a, b) => a.created_at.localeCompare(b.created_at)),
     };
   },
-  async createGroup({ name, description, homepage, avatarFile }) {
+  async createGroup({ name, description, homepage, country, region, city, avatarFile }) {
     if (!name?.trim()) throw new Error('Ge gruppen ett namn.');
     const url = normalizeUrl(homepage);
     const avatar_url = avatarFile ? await upload(avatarFile, 400) : null;
-    return ok(await sb.from('groups').insert({ name: name.trim(), description: (description || '').trim(), homepage: url, avatar_url, created_by: needMe() }).select().single());
+    return ok(await sb.from('groups').insert({ name: name.trim(), description: (description || '').trim(), homepage: url, ...place({ country, region, city }), avatar_url, created_by: needMe() }).select().single());
   },
-  async updateGroup(id, { name, description, homepage, avatarFile }) {
+  async updateGroup(id, { name, description, homepage, country, region, city, avatarFile }) {
     const patch = {};
     if (name?.trim()) patch.name = name.trim();
     if (description !== undefined) patch.description = description.trim();
     if (homepage !== undefined) patch.homepage = normalizeUrl(homepage);
+    if (country !== undefined) Object.assign(patch, place({ country, region, city }));
     if (avatarFile) patch.avatar_url = await upload(avatarFile, 400);
     ok(await sb.from('groups').update(patch).eq('id', id));
   },
@@ -183,10 +185,10 @@ export const api = {
 
   // ---- Inlägg ----
   async listCategories() { return sortCategories(ok(await sb.from('categories').select('name')).map((c) => c.name)); },
-  async listPosts({ resources = false, category = null, groupId = null, authorId = null, q = '', feed = false } = {}) {
+  async listPosts({ kind = null, tag = null, groupId = null, authorId = null, q = '', feed = false } = {}) {
     let query = sb.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(200);
-    if (resources) query = query.eq('is_resource', true);
-    if (category) query = query.contains('categories', [category]);
+    if (kind) query = query.eq('kind', kind);
+    if (tag) query = query.contains('categories', [tag]);
     if (groupId) query = query.eq('group_id', groupId);
     if (authorId) query = query.eq('author_id', authorId);
     if (q.trim()) query = query.ilike('caption', `%${q.trim()}%`);
@@ -206,7 +208,8 @@ export const api = {
     const v = normalizePostInput(input);
     await ensureCategories(v.categories);
     const post = ok(await sb.from('posts').insert({
-      author_id: needMe(), group_id: v.groupId, caption: v.caption, is_resource: v.isResource, categories: v.categories,
+      author_id: needMe(), group_id: v.groupId, caption: v.caption, kind: v.kind, is_resource: v.isResource, categories: v.categories,
+      space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null,
       fin_total: v.finance?.total ?? null, fin_mode: v.finance?.mode ?? null, fin_expires_at: v.finance?.expiresAt ?? null,
     }).select('id').single());
     await writeSlides(post.id, v.slides);
@@ -217,7 +220,8 @@ export const api = {
     await ensureCategories(v.categories);
     const current = ok(await sb.from('posts').select('fin_total').eq('id', id).single());
     if (current.fin_total != null && !v.finance) throw new Error('Ett finansieringsinlägg kan inte byta typ. Stäng det i stället via ··· på inlägget.');
-    const patch = { group_id: v.groupId, caption: v.caption, is_resource: v.isResource, categories: v.categories, updated_at: new Date().toISOString() };
+    const patch = { group_id: v.groupId, caption: v.caption, kind: v.kind, is_resource: v.isResource, categories: v.categories, updated_at: new Date().toISOString(),
+      space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null };
     if (v.finance) {
       if (current.fin_total == null) Object.assign(patch, { fin_total: v.finance.total, fin_mode: v.finance.mode });
       patch.fin_expires_at = v.finance.expiresAt;

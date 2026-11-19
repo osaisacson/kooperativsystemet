@@ -12,7 +12,7 @@ export function Notifications() {
     return list;
   }, []);
   return html`<div class="page">
-    <${Header} title="Notiser" />
+    <${Header} title="Notiser" back />
     ${n.loading && !n.data ? html`<${Loading} />` : n.error ? html`<${ErrorBox} error=${n.error} />`
       : n.data.length === 0 ? html`<p class="empty">Inga notiser än. Här hamnar kommentarer, ansökningar och beslut.</p>`
       : html`<div class="list">${n.data.map((x) => html`<a key=${x.id} class=${'row notif' + (x.read ? '' : ' unread')}

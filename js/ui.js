@@ -2,7 +2,7 @@
 import { html, useState, useEffect, useRef } from './lib.js';
 import { api } from './api/index.js';
 import { state, go, toast, refreshBadges, refreshMe, attempt } from './store.js';
-import { fmtKr, fmtDate, timeAgo, PAYOUT_BANK_LIMIT } from './util.js';
+import { fmtKr, fmtDate, timeAgo, PAYOUT_BANK_LIMIT, SPACE_COSTS, postType } from './util.js';
 
 const ICONS = {
   home: '<path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/>',
@@ -16,6 +16,7 @@ const ICONS = {
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/>',
+  bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   layers: '<rect x="8" y="3" width="13" height="13" rx="2"/><path d="M16 21H5a2 2 0 0 1-2-2V8"/>',
 };
@@ -209,8 +210,9 @@ export function PostMenu({ post, onChange }) {
 export function PostCard({ post: p, onChange, full = false }) {
   const [applying, setApplying] = useState(false);
   const edited = new Date(p.updated_at) - new Date(p.created_at) > 60e3;
-  // Ett märke uppe till höger på bilden för allt i gemensamma resurser (ersätter taggraden).
-  const badge = p.finance ? 'Finansiering' : p.is_resource ? (p.categories?.[0] || 'Gemensam resurs') : null;
+  // Märke uppe till höger på bilden för finansiering och lokaler.
+  const kind = postType(p);
+  const badge = kind === 'finansiering' ? 'Finansiering' : kind === 'lokal' ? 'Lokal' : null;
   return html`<article class="post">
     <div class="post-head">
       ${p.group
@@ -225,6 +227,9 @@ export function PostCard({ post: p, onChange, full = false }) {
       : html`<div class="textpost">${badge && html`<span class="img-badge corner-solo">${badge}</span>`}${p.caption}</div>`}
     <div class="post-body">
       ${p.slides.length > 0 && p.caption && html`<p class="caption">${p.caption}</p>`}
+      ${kind === 'lokal' && html`<p class="space-info">${(p.space_functions || []).join(' · ')}
+        <span class="space-cost">${SPACE_COSTS[p.space_cost] || ''}${p.space_cost === 'kostar' && p.space_price ? `: ${p.space_price}` : ''}</span></p>`}
+      ${kind === 'vanlig' && p.categories?.length > 0 && html`<p class="topics">${p.categories.map((c) => html`<span>#${c.toLowerCase()}</span>`)}</p>`}
       ${p.finance && html`<${FinanceBox} post=${p} onApply=${() => setApplying(true)} />`}
       <a class="action" href=${'#/post/' + p.id} aria-label=${`${p.comment_count} kommentarer`}><${Icon} name="chat" size=${22} /><span>${p.comment_count}</span></a>
       ${!full && p.first_comment && html`<a class="first-comment" href=${'#/post/' + p.id}><strong>${p.first_comment.group?.name || p.first_comment.author.name}</strong> ${p.first_comment.body}</a>`}

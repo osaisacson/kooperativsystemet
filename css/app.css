@@ -57,8 +57,8 @@ main { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px); 
 .label.small { font-size: 13px; margin: 10px 0 6px; }
 
 /* ---- Toppfält ---- */
-.topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 8px;
-  background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.topbar { position: sticky; top: 0; z-index: 25; display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 8px;
+  background: var(--bg); border-bottom: 1px solid var(--line); }  /* ingen blur: den fångar menyer som öppnas härifrån */
 .topbar-title { flex: 1; text-align: center; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-side { min-width: 44px; display: flex; align-items: center; gap: 4px; }
 .topbar-side.right { justify-content: flex-end; }
@@ -371,3 +371,27 @@ input, textarea, select { font-size: 16px !important; }
 .btn.provider.apple { background: #000; color: #fff; border-color: #000; }
 .divider { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; color: var(--muted); font-size: 12.5px; }
 .divider::before, .divider::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+
+/* ---- Platsväljare, flikar med plus, lokaler, ämnen ---- */
+.place-btn { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 4px 0; line-height: 1.15; }
+.place-name { font-size: 19px; font-weight: 700; color: var(--accent); display: inline-flex; align-items: center; gap: 4px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.place-name .chev { font-size: 13px; color: var(--muted); }
+.place-hint { font-size: 11px; color: var(--muted); }
+.topbar.brand { height: 56px; }
+.place-opt { display: flex; justify-content: space-between; align-items: baseline; text-align: left; padding: 14px 18px; }
+.place-opt.on { font-weight: 700; color: var(--accent); }
+.sheet-label { padding: 12px 18px 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--line); }
+.sheet { max-height: 80dvh; overflow: auto; }
+.tab-sum { display: block; font-size: 11px; font-weight: 600; color: var(--accent); margin-top: 1px; }
+.tab-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 16px; min-height: 48px; }
+.tab-info { flex: 1; min-width: 0; }
+.chips.tight { padding: 0; }
+.cost-filter { padding: 0 16px 8px; }
+.chip.small { padding: 4px 10px; font-size: 12px; }
+.space-info { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
+.space-cost { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: 12px; }
+.topics { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 6px; font-size: 13px; color: var(--accent); }
+.group-place { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+fieldset.place-fields { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+fieldset.place-fields legend { padding: 0; margin: 4px 0 4px; }
+.form select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-soft); }
