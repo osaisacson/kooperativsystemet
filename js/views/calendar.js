@@ -39,14 +39,15 @@ export function CalendarView() {
   const time = (iso) => new Date(iso).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
 
   return html`<div class="page">
-    <header class="topbar brand"><${PlaceSwitcher} groups=${groups.data || []} /></header>
+    <header class="topbar brand"><${PlaceSwitcher} groups=${groups.data || []} />
+      <a class="chip-add" href="#/ny?typ=evenemang" aria-label="Nytt evenemang" style="margin-left:auto"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></a></header>
     <div class="cal-filter">
       <input inputmode="numeric" value=${zip} onInput=${(e) => setZip(e.target.value)} placeholder="Postnummer" aria-label="Filtrera på postnummer" />
       ${zip && html`<button class="clear" aria-label="Rensa" onClick=${() => setZip('')}>×</button>`}
     </div>
     ${events.loading && !events.data ? html`<${Loading} />` : events.error ? html`<${ErrorBox} error=${events.error} />`
       : !days.length ? html`<p class="empty">Inga kommande evenemang i ${placeLabel(place)}${digits ? ` med postnummer ${zip}` : ''}.
-          <br /><span class="small">Lägg upp ett genom att kryssa i <b>Det här är ett evenemang</b> när du skapar ett inlägg.</span></p>`
+          <br /><span class="small">Tryck på <b>+</b> uppe till höger för att lägga upp ett.</span></p>`
       : days.map((d) => html`<section class="cal-day" key=${d.key}>
           <h2 class="cal-date">${dayLabel(d.date)}</h2>
           ${d.items.map((p) => html`<a class="cal-item" href=${'#/post/' + p.id} key=${p.id}>

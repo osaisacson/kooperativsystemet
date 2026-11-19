@@ -172,12 +172,15 @@ export function PostView({ id }) {
 
 const plusDays = (d) => new Date(Date.now() + d * 864e5).toISOString().slice(0, 10);
 
+// Typerna man väljer mellan när man lägger upp något. Evenemang sparas som ett vanligt inlägg med datum, tid och plats.
+const FORM_TYPES = { vanlig: 'Vanlig post', evenemang: 'Evenemang', finansiering: 'Tillgänglig finansiering', lokal: 'Lokal att låna eller hyra' };
 const TYPE_HELP = {
   vanlig: 'Syns i flödet, i gruppen och på din profil.',
+  evenemang: 'Något som händer en viss dag: får tid och plats, syns i kalendern och folk kan anmäla sig.',
   finansiering: 'Pengar som andra grupper kan söka. Syns under Finansiering.',
   lokal: 'En lokal andra kan låna, använda mot en gentjänst eller hyra. Syns under Lokaler.',
 };
-const TYPE_TITLE = { vanlig: 'Nytt inlägg', finansiering: 'Ny finansiering', lokal: 'Ny lokal' };
+const TYPE_TITLE = { vanlig: 'Nytt inlägg', evenemang: 'Nytt evenemang', finansiering: 'Ny finansiering', lokal: 'Ny lokal' };
 
 function FinanceSteps() {
   return html`<div class="steps">
@@ -220,12 +223,12 @@ function ChipPicker({ options, selected, onChange, placeholder }) {
 export function Compose({ groupId: initialGroup, type: initialType, editId }) {
   const s = useStore();
   const editing = !!editId;
-  const fixedType = editing || !!POST_TYPES[initialType];   // från en flik: typen är redan vald
+  const fixedType = editing || !!FORM_TYPES[initialType];   // från en flik: typen är redan vald
   const myGroups = s.myGroups;
   const tagOptions = useAsync(() => api.listCategories(), []);
   const spaceOptions = useAsync(async () => [...new Set([...DEFAULT_FUNCTIONS, ...(await api.listPosts({ kind: 'lokal' })).flatMap((p) => p.space_functions || [])])], []);
   const [loaded, setLoaded] = useState(!editing);
-  const [type, setType] = useState(POST_TYPES[initialType] ? initialType : 'vanlig');
+  const [type, setType] = useState(FORM_TYPES[initialType] ? initialType : 'vanlig');
   const [slides, setSlides] = useState([]);
   const [caption, setCaption] = useState('');
   const [groupId, setGroupId] = useState(initialGroup && s.memberOf.has(initialGroup) ? initialGroup : myGroups[0]?.id || null);
@@ -238,7 +241,6 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
   const [finMode, setFinMode] = useState('split');
   const [finEnd, setFinEnd] = useState(plusDays(30));
   const [hadFinance, setHadFinance] = useState(false);
-  const [isEvent, setIsEvent] = useState(false);
   const [ev, setEv] = useState({ date: '', start: '', end: '', address: '', rsvp: true });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -247,7 +249,7 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
     if (!editing) return;
     api.getPost(editId).then((p) => {
       if (p.author_id !== s.me.id) return go('/post/' + editId);
-      setType(postType(p));
+      setType(p.is_event ? 'evenemang' : postType(p));
       setSlides(p.slides.map((x) => ({ key: x.id, id: x.id, image_url: x.image_url, preview: x.image_url, text: x.text || '' })));
       setCaption(p.caption || ''); setGroupId(p.group_id); setPersonal(!p.group_id);
       setTags(p.categories || []);
@@ -255,7 +257,6 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
       if (p.is_event && p.event_start) {
         const d = new Date(p.event_start), e = p.event_end ? new Date(p.event_end) : null;
         const loc = (x) => `${String(x.getHours()).padStart(2, '0')}:${String(x.getMinutes()).padStart(2, '0')}`;
-        setIsEvent(true);
         setEv({ date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, start: loc(d), end: e ? loc(e) : '',
           address: p.event_address || '', postcode: p.event_postcode, city: p.event_city, region: p.event_region, country: p.event_country,
           lat: p.event_lat, lng: p.event_lng, rsvp: p.event_rsvp !== false });
@@ -285,13 +286,13 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
     setBusy(true);
     try {
       const payload = {
-        type, groupId: isPersonal ? null : groupId, caption, tags,
+        type: type === 'evenemang' ? 'vanlig' : type, groupId: isPersonal ? null : groupId, caption, tags,
         slides: slides.map(({ id, file, image_url, text }) => ({ id, file, image_url, text })),
         finance: type === 'finansiering'
           ? { total: Number(String(finTotal).replace(/\s/g, '')), mode: finMode, expiresAt: finEnd ? new Date(finEnd + 'T23:59:59').toISOString() : null }
           : null,
         space: type === 'lokal' ? { functions, cost, price } : null,
-        event: isEvent && type !== 'finansiering' ? ev : null,
+        event: type === 'evenemang' ? ev : null,
       };
       if (editing) { await api.updatePost(editId, payload); go('/post/' + editId); }
       else { const id = await api.createPost(payload); refreshBadges(); go('/post/' + id); }
@@ -306,7 +307,7 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
 
       ${!fixedType && html`<fieldset class="field types">
         <legend class="label">Typ av post</legend>
-        ${Object.entries(POST_TYPES).map(([k, label]) => html`<label class=${'radio type' + (type === k ? ' on' : '')} key=${k}>
+        ${Object.entries(FORM_TYPES).map(([k, label]) => html`<label class=${'radio type' + (type === k ? ' on' : '')} key=${k}>
           <input type="radio" name="type" value=${k} checked=${type === k} onChange=${() => setType(k)} />
           <span><strong>${label}</strong><small>${TYPE_HELP[k]}</small></span></label>`)}
       </fieldset>`}
@@ -331,19 +332,17 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
         ${cost === 'kostar' && html`<label>Pris<input value=${price} onInput=${(e) => setPrice(e.target.value)} placeholder="t.ex. 200 kr per dag" /></label>`}
       </section>`}
 
-      ${type !== 'finansiering' && html`<section class="field event-form">
-        <label class="check"><input type="checkbox" checked=${isEvent} onChange=${(e) => setIsEvent(e.target.checked)} />
-          <span><strong>Det här är ett evenemang</strong><small>Får datum, tid och plats, syns i kalendern och kan läggas till i ens egen kalender.</small></span></label>
-        ${isEvent && html`<div class="event-fields">
+      ${type === 'evenemang' && html`<section class="field event-form">
+        <div class="event-fields">
           <div class="inline3">
-            <label>Datum<input type="date" required value=${ev.date} min=${plusDays(0)} onInput=${(e) => setEv({ ...ev, date: e.target.value })} /></label>
-            <label>Börjar<input type="time" required value=${ev.start} onInput=${(e) => setEv({ ...ev, start: e.target.value })} /></label>
-            <label>Slutar<input type="time" value=${ev.end} onInput=${(e) => setEv({ ...ev, end: e.target.value })} /></label>
+            <label>Datum<input type="date" required value=${ev.date} min=${plusDays(0)} onInput=${(e) => setEv((v) => ({ ...v, date: e.target.value }))} /></label>
+            <label>Börjar<input type="time" required value=${ev.start} onInput=${(e) => setEv((v) => ({ ...v, start: e.target.value }))} /></label>
+            <label>Slutar<input type="time" value=${ev.end} onInput=${(e) => setEv((v) => ({ ...v, end: e.target.value }))} /></label>
           </div>
-          <label>Plats<${AddressPicker} value=${ev} onPick=${(h) => setEv({ ...ev, ...h })} placeholder="Adress där det händer" /></label>
-          <label class="check"><input type="checkbox" checked=${ev.rsvp} onChange=${(e) => setEv({ ...ev, rsvp: e.target.checked })} />
+          <label>Plats<${AddressPicker} value=${ev} onPick=${(h) => setEv((v) => ({ ...v, ...h }))} placeholder="Adress där det händer" /></label>
+          <label class="check"><input type="checkbox" checked=${ev.rsvp} onChange=${(e) => setEv((v) => ({ ...v, rsvp: e.target.checked }))} />
             <span>Låt folk anmäla sig <small>Knapparna Intresserad och Kommer visas, med antal.</small></span></label>
-        </div>`}
+        </div>
       </section>`}
 
       <section class="field">
@@ -378,7 +377,7 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
         <textarea rows="4" value=${caption} onInput=${(e) => setCaption(e.target.value)}
           placeholder=${{ finansiering: 'Vad kan pengarna sökas för? Vem kan söka?', lokal: 'Var ligger lokalen, när går den att använda och hur bokar man?' }[type] || 'Berätta vad ni gjort, vad ni lärt er eller vad ni behöver…'}></textarea></label>
 
-      ${type === 'vanlig' && html`<section class="field">
+      ${(type === 'vanlig' || type === 'evenemang') && html`<section class="field">
         <div class="label">Kan andra lära sig något av det här?</div>
         <small class="muted">Lägg till ämnen så att andra som jobbar med samma sak hittar inlägget.</small>
         <${ChipPicker} options=${tagOptions.data || []} selected=${tags} onChange=${setTags} placeholder="Nytt ämne, t.ex. Solel…" />

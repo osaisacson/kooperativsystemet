@@ -459,7 +459,7 @@ a.todo small { display: block; }
 .event-rsvp { display: flex; gap: 8px; }
 .event-rsvp .btn { flex: 1; }
 .event-cal { display: flex; gap: 8px; font-size: 13px; flex-wrap: wrap; }
-.event-fields { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.event-fields { display: flex; flex-direction: column; gap: 10px; }
 .inline3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; }
 .inline3 label { min-width: 0; }
 .event-form { padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); }
