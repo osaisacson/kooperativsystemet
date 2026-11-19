@@ -2,7 +2,7 @@
 import { html, useState, useEffect } from '../lib.js';
 import { api } from '../api/index.js';
 import { useStore, useAsync, go, attempt, refreshBadges, setPlace } from '../store.js';
-import { Icon, Avatar, Count, Header, PostCard, Comments, Loading, ErrorBox, Sheet, GroupPicker } from '../ui.js';
+import { Icon, Avatar, Count, Header, PostCard, Comments, Loading, ErrorBox, Sheet, GroupPicker, AddressPicker } from '../ui.js';
 import { PAYOUT_BANK_LIMIT, POST_TYPES, DEFAULT_FUNCTIONS, SPACE_COSTS, PLACE_LEVELS, postType, placeLabel, inPlace, fmtKr } from '../util.js';
 
 // Tips om att spara appen på hemskärmen – visas på mobilen tills man stänger det.
@@ -238,6 +238,8 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
   const [finMode, setFinMode] = useState('split');
   const [finEnd, setFinEnd] = useState(plusDays(30));
   const [hadFinance, setHadFinance] = useState(false);
+  const [isEvent, setIsEvent] = useState(false);
+  const [ev, setEv] = useState({ date: '', start: '', end: '', address: '', rsvp: true });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -250,6 +252,14 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
       setCaption(p.caption || ''); setGroupId(p.group_id); setPersonal(!p.group_id);
       setTags(p.categories || []);
       setFunctions(p.space_functions || []); setCost(p.space_cost || 'gratis'); setPrice(p.space_price || '');
+      if (p.is_event && p.event_start) {
+        const d = new Date(p.event_start), e = p.event_end ? new Date(p.event_end) : null;
+        const loc = (x) => `${String(x.getHours()).padStart(2, '0')}:${String(x.getMinutes()).padStart(2, '0')}`;
+        setIsEvent(true);
+        setEv({ date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, start: loc(d), end: e ? loc(e) : '',
+          address: p.event_address || '', postcode: p.event_postcode, city: p.event_city, region: p.event_region, country: p.event_country,
+          lat: p.event_lat, lng: p.event_lng, rsvp: p.event_rsvp !== false });
+      }
       if (p.fin_total != null) {
         setHadFinance(true); setFinTotal(String(p.fin_total)); setFinMode(p.fin_mode);
         setFinEnd(p.fin_expires_at ? p.fin_expires_at.slice(0, 10) : '');
@@ -281,6 +291,7 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
           ? { total: Number(String(finTotal).replace(/\s/g, '')), mode: finMode, expiresAt: finEnd ? new Date(finEnd + 'T23:59:59').toISOString() : null }
           : null,
         space: type === 'lokal' ? { functions, cost, price } : null,
+        event: isEvent && type !== 'finansiering' ? ev : null,
       };
       if (editing) { await api.updatePost(editId, payload); go('/post/' + editId); }
       else { const id = await api.createPost(payload); refreshBadges(); go('/post/' + id); }
@@ -318,6 +329,21 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
         ${Object.entries(SPACE_COSTS).map(([k, label]) => html`<label class="radio" key=${k}>
           <input type="radio" name="cost" checked=${cost === k} onChange=${() => setCost(k)} /><span>${label}</span></label>`)}
         ${cost === 'kostar' && html`<label>Pris<input value=${price} onInput=${(e) => setPrice(e.target.value)} placeholder="t.ex. 200 kr per dag" /></label>`}
+      </section>`}
+
+      ${type !== 'finansiering' && html`<section class="field event-form">
+        <label class="check"><input type="checkbox" checked=${isEvent} onChange=${(e) => setIsEvent(e.target.checked)} />
+          <span><strong>Det här är ett evenemang</strong><small>Får datum, tid och plats, syns i kalendern och kan läggas till i ens egen kalender.</small></span></label>
+        ${isEvent && html`<div class="event-fields">
+          <div class="inline3">
+            <label>Datum<input type="date" required value=${ev.date} min=${plusDays(0)} onInput=${(e) => setEv({ ...ev, date: e.target.value })} /></label>
+            <label>Börjar<input type="time" required value=${ev.start} onInput=${(e) => setEv({ ...ev, start: e.target.value })} /></label>
+            <label>Slutar<input type="time" value=${ev.end} onInput=${(e) => setEv({ ...ev, end: e.target.value })} /></label>
+          </div>
+          <label>Plats<${AddressPicker} value=${ev} onPick=${(h) => setEv({ ...ev, ...h })} placeholder="Adress där det händer" /></label>
+          <label class="check"><input type="checkbox" checked=${ev.rsvp} onChange=${(e) => setEv({ ...ev, rsvp: e.target.checked })} />
+            <span>Låt folk anmäla sig <small>Knapparna Intresserad och Kommer visas, med antal.</small></span></label>
+        </div>`}
       </section>`}
 
       <section class="field">

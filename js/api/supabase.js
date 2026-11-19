@@ -1,7 +1,7 @@
 // Riktig backend: Supabase (Postgres + inloggning + bildlagring). Se supabase/setup.sql för tabeller och regler.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js';
-import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, geocode, sortCategories, resizeImage } from '../util.js';
+import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, geocode, eventColumns, sortCategories, resizeImage } from '../util.js';
 
 // Kommer man hit via länken i ett "återställ lösenord"-mejl står det type=recovery i adressen.
 // Läses av innan Supabase hinner ta bort det.
@@ -42,7 +42,7 @@ async function upload(file, max = 1280) {
 }
 
 const PROFILE = 'id,name,avatar_url';
-const POST_SELECT = `*, author:profiles!posts_author_id_fkey(${PROFILE}), group:groups(id,name,avatar_url,city,region,country), slides:post_slides(id,position,image_url,text), comments(id,applied_amount,status,body,created_at,parent_id,author:profiles(id,name),group:groups(id,name)), memory_votes(user_id)`;
+const POST_SELECT = `*, author:profiles!posts_author_id_fkey(${PROFILE}), group:groups(id,name,avatar_url,city,region,country), slides:post_slides(id,position,image_url,text), comments(id,applied_amount,status,body,created_at,parent_id,author:profiles(id,name),group:groups(id,name)), memory_votes(user_id), event_rsvps(user_id,status)`;
 
 function shapePost(p) {
   const cs = p.comments || [];
@@ -53,13 +53,16 @@ function shapePost(p) {
     ...rest, slides: (p.slides || []).sort((a, b) => a.position - b.position), comment_count: cs.length, finance: financeSummary(p, cs),
     first_comment: first ? { body: first.body, author: first.author, group: first.group } : null,
     memory_count: votes.length, memory_mine: votes.some((v) => v.user_id === meId), memory_votes: undefined,
+    rsvp_interested: (p.event_rsvps || []).filter((r) => r.status === 'interested').length,
+    rsvp_going: (p.event_rsvps || []).filter((r) => r.status === 'going').length,
+    rsvp_mine: (p.event_rsvps || []).find((r) => r.user_id === meId)?.status || null, event_rsvps: undefined,
   };
 }
 const place = ({ country, region, city }) => ({ country: (country || '').trim() || null, region: (region || '').trim() || null, city: (city || '').trim() || null });
 // Plats + adress + kartposition (slås upp automatiskt).
-async function located({ country, region, city, address }) {
-  const p = { ...place({ country, region, city }), address: (address || '').trim() || null };
-  const pos = await geocode(p);
+async function located({ country, region, city, address, postcode, lat, lng }) {
+  const p = { ...place({ country, region, city }), address: (address || '').trim() || null, postcode: (postcode || '').trim() || null };
+  const pos = lat != null && lng != null ? { lat, lng } : await geocode(p);   // vald adress har redan en position
   return { ...p, lat: pos?.lat ?? null, lng: pos?.lng ?? null };
 }
 async function ensureCategories(cats) {
@@ -159,18 +162,18 @@ export const api = {
       highlights: highlights.sort((a, b) => a.created_at.localeCompare(b.created_at)),
     };
   },
-  async createGroup({ name, description, homepage, country, region, city, address, avatarFile }) {
+  async createGroup({ name, description, homepage, country, region, city, address, postcode, lat, lng, avatarFile }) {
     if (!name?.trim()) throw new Error('Ge gruppen ett namn.');
     const url = normalizeUrl(homepage);
     const avatar_url = avatarFile ? await upload(avatarFile, 400) : null;
-    return ok(await sb.from('groups').insert({ name: name.trim(), description: (description || '').trim(), homepage: url, ...(await located({ country, region, city, address })), avatar_url, created_by: needMe() }).select().single());
+    return ok(await sb.from('groups').insert({ name: name.trim(), description: (description || '').trim(), homepage: url, ...(await located({ country, region, city, address, postcode, lat, lng })), avatar_url, created_by: needMe() }).select().single());
   },
-  async updateGroup(id, { name, description, homepage, country, region, city, address, avatarFile }) {
+  async updateGroup(id, { name, description, homepage, country, region, city, address, postcode, lat, lng, avatarFile }) {
     const patch = {};
     if (name?.trim()) patch.name = name.trim();
     if (description !== undefined) patch.description = description.trim();
     if (homepage !== undefined) patch.homepage = normalizeUrl(homepage);
-    if (country !== undefined) Object.assign(patch, await located({ country, region, city, address }));
+    if (country !== undefined) Object.assign(patch, await located({ country, region, city, address, postcode, lat, lng }));
     if (avatarFile) patch.avatar_url = await upload(avatarFile, 400);
     ok(await sb.from('groups').update(patch).eq('id', id));
   },
@@ -217,7 +220,7 @@ export const api = {
     await ensureCategories(v.categories);
     const post = ok(await sb.from('posts').insert({
       author_id: needMe(), group_id: v.groupId, caption: v.caption, kind: v.kind, is_resource: v.isResource, categories: v.categories,
-      space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null,
+      space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null, ...eventColumns(v.event),
       fin_total: v.finance?.total ?? null, fin_mode: v.finance?.mode ?? null, fin_expires_at: v.finance?.expiresAt ?? null,
     }).select('id').single());
     await writeSlides(post.id, v.slides);
@@ -229,7 +232,7 @@ export const api = {
     const current = ok(await sb.from('posts').select('fin_total').eq('id', id).single());
     if (current.fin_total != null && !v.finance) throw new Error('Ett finansieringsinlägg kan inte byta typ. Stäng det i stället via ··· på inlägget.');
     const patch = { group_id: v.groupId, caption: v.caption, kind: v.kind, is_resource: v.isResource, categories: v.categories, updated_at: new Date().toISOString(),
-      space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null };
+      space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null, ...eventColumns(v.event) };
     if (v.finance) {
       if (current.fin_total == null) Object.assign(patch, { fin_total: v.finance.total, fin_mode: v.finance.mode });
       patch.fin_expires_at = v.finance.expiresAt;
@@ -240,6 +243,19 @@ export const api = {
   async deletePost(id) {
     const rows = ok(await sb.from('posts').delete().eq('id', id).select('id'));
     if (!rows.length) throw new Error('Du får inte ta bort det här inlägget.');
+  },
+  async deleteComment(id) {
+    const rows = ok(await sb.from('comments').delete().eq('id', id).select('id'));
+    if (!rows.length) throw new Error('Det gick inte att ta bort (en beviljad ansökan kan inte tas bort).');
+  },
+  async setRsvp(postId, status) {
+    const me = needMe();
+    if (!status) ok(await sb.from('event_rsvps').delete().eq('post_id', postId).eq('user_id', me));
+    else ok(await sb.from('event_rsvps').upsert({ post_id: postId, user_id: me, status }, { onConflict: 'post_id,user_id' }));
+  },
+  async listEvents() {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return ok(await sb.from('posts').select(POST_SELECT).eq('is_event', true).gte('event_start', today.toISOString()).order('event_start')).map(shapePost);
   },
   async toggleMemory(postId) {
     const me = needMe();

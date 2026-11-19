@@ -2,7 +2,7 @@
 import { html, useState, useEffect } from '../lib.js';
 import { api } from '../api/index.js';
 import { APP_NAME, AUTH_PROVIDERS } from '../config.js';
-import { useStore, useAsync, go, attempt, refreshMe, setState, toast } from '../store.js';
+import { useStore, useAsync, go, attempt, refreshMe, refreshBadges, setState, toast } from '../store.js';
 import { Avatar, Header, PostGrid, GroupRow, UserRow, ImagePicker, Loading, ErrorBox } from '../ui.js';
 
 const PROVIDERS = {
@@ -101,6 +101,19 @@ export function Search({ tab: initialTab }) {
   </div>`;
 }
 
+// Gruppernas ikoner i en rad som går att scrolla åt höger; fler laddas in när man närmar sig slutet.
+function GroupIcons({ groups }) {
+  const [shown, setShown] = useState(24);
+  const more = (e) => {
+    const el = e.currentTarget;
+    if (shown < groups.length && el.scrollLeft + el.clientWidth > el.scrollWidth - 120) setShown((n) => n + 24);
+  };
+  return html`<div class="group-icons" onScroll=${more} aria-label="Grupper">
+    ${groups.slice(0, shown).map((g) => html`<a href=${'#/grupp/' + g.id} key=${g.id} title=${g.name + (g.role === 'admin' ? ' (admin)' : '')}>
+      <${Avatar} src=${g.avatar_url} name=${g.name} size=${44} /></a>`)}
+  </div>`;
+}
+
 export function Profile({ id }) {
   const s = useStore();
   const u = useAsync(() => api.getUser(id), [id]);
@@ -112,6 +125,7 @@ export function Profile({ id }) {
   async function logout() { await api.signOut(); await refreshMe(); go('/'); }
   return html`<div class="page">
     <${Header} title=${user.name} back=${!isMe} />
+    ${user.groups.length > 0 && html`<${GroupIcons} groups=${user.groups} />`}
     <div class="profile-head">
       <${Avatar} src=${user.avatar_url} name=${user.name} size=${84} />
       <div class="stats">
@@ -120,13 +134,12 @@ export function Profile({ id }) {
       </div>
     </div>
     <div class="profile-info"><strong>${user.name}</strong>${user.nickname && html` <span class="muted">"${user.nickname}"</span>`}</div>
-    ${user.groups.length > 0 && html`<div class="chips wrap pad-x">${user.groups.map((g) => html`<a class="chip" href=${'#/grupp/' + g.id} key=${g.id}>
-      <${Avatar} src=${g.avatar_url} name=${g.name} size=${18} /> ${g.name}${g.role === 'admin' ? ' · admin' : ''}</a>`)}</div>`}
     <div class="profile-actions">
       ${isMe
         ? html`<a class="btn" href="#/redigera-profil">Redigera profil</a><button class="btn" onClick=${logout}>Logga ut</button>`
         : html`<a class="btn primary" href=${'#/meddelanden/' + id}>Skicka meddelande</a>`}
     </div>
+    ${isMe && html`<${BadgeSetting} />`}
     ${isMe && user.groups.length === 0 && html`<div class="nudge pad-x">Du är inte med i någon grupp än. <a href="#/valkommen">Hitta eller skapa en grupp</a></div>`}
     <div class="grid-sep"></div>
     ${posts.data ? html`<${PostGrid} posts=${posts.data} />` : html`<${Loading} />`}
@@ -156,6 +169,18 @@ export function NewPassword() {
       ${err && html`<p class="error">${err}</p>`}
       <button class="btn primary block" disabled=${busy}>${busy ? 'Sparar…' : 'Spara lösenordet'}</button>
     </form>
+  </div>`;
+}
+
+// iPhone visar bara siffran på appikonen om man gett appen tillåtelse att visa notiser.
+function BadgeSetting() {
+  const supported = 'setAppBadge' in navigator && 'Notification' in window;
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const [perm, setPerm] = useState(supported ? Notification.permission : 'unsupported');
+  if (!supported || !standalone || perm === 'granted' || perm === 'denied') return null;
+  return html`<div class="nudge pad-x badge-setting">
+    <span>Vill du se en röd siffra på appikonen när du har nya meddelanden eller något att göra?</span>
+    <button class="btn small primary" onClick=${async () => { setPerm(await Notification.requestPermission()); refreshBadges(); }}>Slå på</button>
   </div>`;
 }
 

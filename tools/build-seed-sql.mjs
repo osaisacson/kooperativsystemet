@@ -50,6 +50,9 @@ sql += `delete from public.notifications where post_id in (${SEED.posts.map((p) 
 sql += rows('highlights', ['id', 'group_id', 'title', 'post_ids', 'created_at'],
   SEED.highlights.map((h) => [lit(h.id), lit(h.group_id), lit(h.title), arr(h.post_ids, 'uuid'), ago(h.h)]));
 
+const evStart = (e) => `(date_trunc('day', now() at time zone 'Europe/Stockholm') + interval '${e.inDays} days ${e.hour} hours') at time zone 'Europe/Stockholm'`;
+sql += SEED.posts.filter((p) => p.event).map((p) => `update public.posts set is_event = true, event_start = ${evStart(p.event)}, event_end = ${evStart(p.event)} + interval '${p.event.durationH} hours', event_address = ${lit(p.event.address)}, event_postcode = ${lit(p.event.postcode)}, event_city = ${lit(p.event.city)}, event_region = ${lit(p.event.region)}, event_country = 'Sverige', event_lat = ${p.event.lat}, event_lng = ${p.event.lng}, event_rsvp = true where id = ${lit(p.id)};`).join('\n') + '\n';
+sql += rows('event_rsvps', ['post_id', 'user_id', 'status'], SEED.rsvps.map((r) => [lit(r.post_id), lit(r.user_id), lit(r.status)]));
 sql += rows('memory_votes', ['post_id', 'user_id'], SEED.memory.map((m) => [lit(m.post_id), lit(m.user_id)]));
 
 const out = new URL('../supabase/seed.sql', import.meta.url);

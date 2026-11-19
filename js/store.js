@@ -50,7 +50,13 @@ export function toast(msg) {
 
 export async function refreshBadges() {
   if (!state.me) return;
-  try { setState({ badges: await api.badges() }); } catch (e) { console.warn(e); }
+  try {
+    const badges = await api.badges();
+    setState({ badges });
+    // Röd prick/siffra på appikonen: olästa meddelanden + saker att göra med finansiering.
+    const n = (badges.messages || 0) + (badges.todos || 0);
+    if ('setAppBadge' in navigator) (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+  } catch (e) { console.warn(e); }
 }
 
 export async function refreshMe() {

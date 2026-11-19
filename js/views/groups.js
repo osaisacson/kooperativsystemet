@@ -2,27 +2,29 @@
 import { html, useState } from '../lib.js';
 import { api } from '../api/index.js';
 import { useStore, useAsync, go, attempt, refreshMe } from '../store.js';
-import { Icon, Avatar, Header, PostGrid, GroupRow, Modal, ImagePicker, Loading, ErrorBox } from '../ui.js';
+import { Icon, Avatar, Header, PostGrid, GroupRow, Modal, ImagePicker, Loading, ErrorBox, AddressPicker } from '../ui.js';
 import { prettyUrl, countryNames } from '../util.js';
 
 // Land, region och stad för en grupp. Förslag hämtas från andra grupper.
 function PlaceFields({ value, onChange }) {
   const groups = useAsync(() => api.listGroups(), []);
-  const uniq = (k, filter) => [...new Set((groups.data || []).filter(filter || (() => true)).map((g) => g[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'sv'));
-  const set = (k) => (e) => onChange({ ...value, [k]: e.target.value });
+  const cities = [...new Set((groups.data || []).map((g) => g.city).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'sv'));
+  // Adressen väljs ur en riktig adresslista. Staden föreslås därifrån men kan skrivas fritt –
+  // t.ex. Göteborg även om adressen ligger i Mölndal eller på Hisingen.
+  function pick(h) {
+    onChange({ ...value, address: h.address, postcode: h.postcode ?? value.postcode ?? null, lat: h.lat, lng: h.lng,
+      ...(h.city ? { city: value.cityTouched ? value.city : h.city } : {}),
+      ...(h.region ? { region: h.region } : {}), ...(h.country ? { country: h.country } : {}) });
+  }
   return html`<fieldset class="field place-fields">
     <legend class="label">Var finns gruppen?</legend>
-    <label>Land<select value=${value.country} onChange=${set('country')}>
-      ${countryNames().map((c) => html`<option value=${c}>${c}</option>`)}</select></label>
-    <label>Region <small>(län, delstat …)</small><input list="dl-region" value=${value.region} onInput=${set('region')} placeholder="t.ex. Västra Götalands län" />
-      <datalist id="dl-region">${uniq('region', (g) => g.country === value.country).map((r) => html`<option value=${r} />`)}</datalist></label>
-    <label>Stad eller ort<input list="dl-city" required value=${value.city} onInput=${set('city')} placeholder="t.ex. Göteborg" />
-      <datalist id="dl-city">${uniq('city', (g) => g.country === value.country && (!value.region || g.region === value.region)).map((c) => html`<option value=${c} />`)}</datalist></label>
-    <label>Adress eller område <small>(för kartan)</small><input value=${value.address || ''} onInput=${set('address')} placeholder="t.ex. Ringön eller Järnmalmsgatan 4" /></label>
-    <small class="muted">Staden används för att visa flödet per stad, region eller land. Adressen gör att gruppen hamnar rätt på kartan; utan adress placeras den mitt i staden.</small>
+    <label>Adress<${AddressPicker} value=${value} onPick=${pick} placeholder="t.ex. Järnmalmsgatan 4, Göteborg" /></label>
+    <label>Stad<input list="dl-city" required value=${value.city} onInput=${(e) => onChange({ ...value, city: e.target.value, cityTouched: true })} placeholder="t.ex. Göteborg" />
+      <datalist id="dl-city">${cities.map((c) => html`<option value=${c} />`)}</datalist></label>
+    <small class="muted">Välj adressen ur listan så hamnar gruppen rätt på kartan. Staden är den ni räknar er till – välj en som redan finns eller skriv en ny.</small>
   </fieldset>`;
 }
-const placeText = (g) => [g.city, g.region, g.country].filter(Boolean).join(', ');
+const placeText = (g) => (g.address ? (g.city && !g.address.toLowerCase().includes(g.city.toLowerCase()) ? `${g.address} · ${g.city}` : g.address) : [g.city, g.region].filter(Boolean).join(', '));
 
 export function GroupView({ id }) {
   const s = useStore();
@@ -128,7 +130,7 @@ export function GroupSettings({ id }) {
 
   async function save(e) {
     e.preventDefault();
-    if (await attempt(() => api.updateGroup(id, { name: name ?? grp.name, description: desc ?? grp.description, homepage: homepage ?? grp.homepage ?? '', ...(where || { country: grp.country || 'Sverige', region: grp.region || '', city: grp.city || '', address: grp.address || '' }), avatarFile: file }), 'Sparat')) {
+    if (await attempt(() => api.updateGroup(id, { name: name ?? grp.name, description: desc ?? grp.description, homepage: homepage ?? grp.homepage ?? '', ...(where || { country: grp.country || 'Sverige', region: grp.region || '', city: grp.city || '', address: grp.address || '', postcode: grp.postcode || null, lat: grp.lat ?? null, lng: grp.lng ?? null }), avatarFile: file }), 'Sparat')) {
       await refreshMe(); g.reload();
     }
   }
@@ -141,7 +143,7 @@ export function GroupSettings({ id }) {
       <label>Namn<input required value=${name ?? grp.name} onInput=${(e) => setName(e.target.value)} /></label>
       <label>Beskrivning<textarea rows="3" value=${desc ?? grp.description} onInput=${(e) => setDesc(e.target.value)}></textarea></label>
       <label>Hemsida <small>(valfri)</small><input inputmode="url" autocapitalize="off" value=${homepage ?? grp.homepage ?? ''} onInput=${(e) => setHomepage(e.target.value)} placeholder="https://…" /></label>
-      <${PlaceFields} value=${where || { country: grp.country || 'Sverige', region: grp.region || '', city: grp.city || '', address: grp.address || '' }} onChange=${setWhere} />
+      <${PlaceFields} value=${where || { country: grp.country || 'Sverige', region: grp.region || '', city: grp.city || '', address: grp.address || '', postcode: grp.postcode || null, lat: grp.lat ?? null, lng: grp.lng ?? null }} onChange=${setWhere} />
       <button class="btn primary block">Spara</button>
     </form>
 
@@ -175,7 +177,7 @@ export function NewGroup({ next }) {
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [homepage, setHomepage] = useState('');
-  const [where, setWhere] = useState({ country: 'Sverige', region: '', city: '', address: '' });
+  const [where, setWhere] = useState({ country: 'Sverige', region: '', city: '', address: '', postcode: null, lat: null, lng: null });
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   async function submit(e) {

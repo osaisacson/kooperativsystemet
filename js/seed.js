@@ -80,7 +80,8 @@ export const SEED = {
         { img: photo('1559173525-d16dfd7c17fe'), text: 'Första lagret på halmbalsväggen, ca 2 cm.' },
       ] },
     { id: P(6), group_id: G(1), author_id: U(2), h: 3,
-      caption: 'Grävdag på lördag kl 10 – vi förlänger vassbädden så att hus nummer sex kan kopplas på. Fika finns!',
+      event: { inDays: 3, hour: 10, durationH: 5, address: 'Gottsunda centrum, 756 47 Uppsala', postcode: '756 47', city: 'Uppsala', region: 'Uppsala län', lat: 59.8095, lng: 17.6230 },
+      caption: 'Grävdag! Vi förlänger vassbädden så att hus nummer sex kan kopplas på. Fika finns!',
       slides: [{ img: photo('1715274036728-4385d95a5e9f'), text: 'Spadar och skottkärror står redo.' }] },
     { id: P(7), group_id: G(3), author_id: U(6), h: 26, kind: 'finansiering', fin_total: 5000, fin_mode: 'single', expires_days: 12,
       caption: '5 000 kr till en grupp som vill starta bokashi i sitt trapphus. Pengarna räcker till hinkar, strö och en introduktionskväll. Ansök som kommentar!',
@@ -117,6 +118,21 @@ export const SEED = {
     { id: P(18), group_id: G(5), author_id: U(6), h: 60, kind: 'lokal', space_functions: ['Odling', 'Förråd'], space_cost: 'gratis',
       caption: 'Växthuset bakom lerhuset står tomt på vintern. Låna det för förodling eller som förråd för material.',
       slides: [{ img: photo('1781785178874-7e4a5ece4348'), text: 'Växthuset, 40 kvadratmeter.' }] },
+    { id: P(19), group_id: G(6), author_id: U(3), h: 5, tags: ['Mat'],
+      event: { inDays: 6, hour: 13, durationH: 3, address: 'Backa, 422 46 Hisingen', postcode: '422 46', city: 'Göteborg', region: 'Västra Götalands län', lat: 57.7470, lng: 11.9710 },
+      caption: 'Odlingsträff i andelsodlingen. Vi planerar nästa säsong, delar frön och bjuder på soppa. Alla som är nyfikna på att starta en odling är välkomna.',
+      slides: [{ img: photo('1719763462298-dfd3ae24febc'), text: 'Odlingen i höstskrud.' }] },
+    { id: P(20), group_id: G(3), author_id: U(6), h: 9, tags: ['Byggmetod'],
+      event: { inDays: 10, hour: 18, durationH: 2, address: 'Majorna, 414 63 Göteborg', postcode: '414 63', city: 'Göteborg', region: 'Västra Götalands län', lat: 57.6905, lng: 11.9160 },
+      caption: 'Studiekväll: vi bygger en kompostram i trä tillsammans och går igenom hur man tar hand om maskkompost. Ta med arbetshandskar.',
+      slides: [{ img: photo('1659930087003-2d64e33181f7'), text: 'Vi mäter och sågar själva.' }] },
+  ],
+
+  // Vem som är intresserad av eller kommer på evenemangen.
+  rsvps: [
+    { post_id: P(6), user_id: U(1), status: 'going' }, { post_id: P(6), user_id: U(3), status: 'going' }, { post_id: P(6), user_id: U(5), status: 'interested' },
+    { post_id: P(19), user_id: U(1), status: 'going' }, { post_id: P(19), user_id: U(6), status: 'interested' }, { post_id: P(19), user_id: U(2), status: 'interested' },
+    { post_id: P(20), user_id: U(3), status: 'going' },
   ],
 
   comments: [
@@ -173,6 +189,15 @@ export function activityHours() {
   return { posts, groups };
 }
 
+// Evenemang i exempeldatan: om N dagar kl H lokal tid.
+function eventFields(e) {
+  if (!e) return { is_event: false, event_start: null, event_end: null, event_rsvp: true };
+  const s = new Date(); s.setHours(0, 0, 0, 0); s.setDate(s.getDate() + e.inDays); s.setHours(e.hour);
+  const end = new Date(s.getTime() + e.durationH * 3600e3);
+  return { is_event: true, event_start: s.toISOString(), event_end: end.toISOString(), event_address: e.address, event_postcode: e.postcode,
+    event_city: e.city, event_region: e.region, event_country: 'Sverige', event_lat: e.lat, event_lng: e.lng, event_rsvp: true };
+}
+
 // Gör om fröet till färdiga rader med riktiga tidsstämplar (används av demoläget).
 export function materializeSeed() {
   const iso = (h) => new Date(Date.now() - h * 3600e3).toISOString();
@@ -191,6 +216,7 @@ export function materializeSeed() {
       id: p.id, author_id: p.author_id, group_id: p.group_id, caption: p.caption,
       kind: p.kind || 'vanlig', categories: p.tags || [], is_resource: !!(p.kind || p.tags?.length),
       space_functions: p.space_functions || [], space_cost: p.space_cost ?? null, space_price: p.space_price ?? null,
+      ...eventFields(p.event),
       fin_total: p.fin_total ?? null, fin_mode: p.fin_mode ?? null,
       fin_expires_at: p.expires_days != null ? new Date(Date.now() + p.expires_days * 864e5).toISOString() : null,
       fin_closed: false, created_at: iso(p.h), updated_at: iso(p.h), last_activity_at: iso(act.posts[p.id]),
@@ -203,6 +229,7 @@ export function materializeSeed() {
       paid_at: c.status === 'paid' ? iso(c.h - 2) : null,
     })),
     memory: SEED.memory.map((m) => ({ ...m, created_at: iso(1) })),
+    rsvps: SEED.rsvps.map((r) => ({ ...r, created_at: iso(1) })),
     payouts: Object.fromEntries(SEED.comments.filter((c) => c.payout).map((c) => [c.id, c.payout])),
   };
 }

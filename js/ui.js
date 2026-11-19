@@ -2,7 +2,7 @@
 import { html, useState, useEffect, useRef } from './lib.js';
 import { api } from './api/index.js';
 import { state, go, toast, refreshBadges, refreshMe, attempt } from './store.js';
-import { fmtKr, fmtDate, timeAgo, PAYOUT_BANK_LIMIT, SPACE_COSTS, postType } from './util.js';
+import { fmtKr, fmtDate, timeAgo, PAYOUT_BANK_LIMIT, SPACE_COSTS, postType, fmtEventTime, eventIcs, googleCalendarUrl, eventTitle } from './util.js';
 
 const ICONS = {
   home: '<path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/>',
@@ -16,6 +16,7 @@ const ICONS = {
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/>',
+  calendar: '<rect x="3" y="4.5" width="18" height="16.5" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
   memory: '<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.5L5 21V4a1 1 0 0 1 1-1z"/>',
   map: '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>',
   bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
@@ -110,6 +111,39 @@ export function FinanceBox({ post, onApply }) {
   </div>`;
 }
 
+// Adress med förslag från en riktig adresslista (OpenStreetMap via Photon) medan man skriver.
+// Valt förslag ger även postnummer, stad, region, land och kartposition.
+export function AddressPicker({ value, onPick, placeholder = 'Börja skriva en adress…' }) {
+  const [q, setQ] = useState(value?.address || '');
+  const [hits, setHits] = useState([]);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open || q.trim().length < 3) { setHits([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`https://photon.komoot.io/api/?limit=6&lang=default&lat=59.3&lon=15&q=${encodeURIComponent(q.trim())}`).then((r) => r.json());
+        setHits((r.features || []).map((f) => {
+          const p = f.properties;
+          const street = [p.street || (p.type !== 'city' && p.name), p.housenumber].filter(Boolean).join(' ');
+          const city = p.city || p.town || p.village || (p.type === 'city' ? p.name : null) || p.county || null;
+          const label = [street || p.name, p.district && p.district !== city ? p.district : null, [p.postcode, city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+          return { label, address: label, postcode: p.postcode || null, city, region: p.state || null, country: p.country || null,
+            lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] };
+        }).filter((h, i, all) => all.findIndex((x) => x.label === h.label) === i));
+      } catch { setHits([]); }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [q, open]);
+  const choose = (h) => { setQ(h.address); setOpen(false); setHits([]); onPick(h); };
+  return html`<div class="typeahead">
+    <input value=${q} placeholder=${placeholder} autocomplete="off"
+      onInput=${(e) => { setQ(e.target.value); setOpen(true); onPick({ address: e.target.value, lat: null, lng: null, postcode: null }); }}
+      onKeyDown=${(e) => { if (e.key === 'Enter' && hits[0]) { e.preventDefault(); choose(hits[0]); } }} />
+    ${open && hits.length > 0 && html`<div class="ta-list" role="listbox">${hits.map((h) => html`<button type="button" role="option" class="ta-item" onClick=${() => choose(h)}>
+      <span>📍</span><span>${h.label}</span></button>`)}</div>`}
+  </div>`;
+}
+
 // Välj grupp genom att börja skriva namnet. Vald grupp visas som en rad med "Byt".
 export function GroupPicker({ groups, value, onChange, placeholder = 'Skriv gruppens namn…' }) {
   const [q, setQ] = useState('');
@@ -200,7 +234,10 @@ export function PostMenu({ post, onChange }) {
   const mine = post.author_id === state.me.id;
   const admin = post.group_id && state.adminOf.has(post.group_id);
   async function del() {
-    if (!confirm('Ta bort inlägget? Det går inte att ångra.')) return;
+    const unpaid = post.finance?.granted > 0;
+    if (!confirm(unpaid
+      ? `Det finns beviljade ansökningar på ${fmtKr(post.finance.granted)} som inte är markerade som utbetalda. Om du tar bort inlägget försvinner de och deras betalningsuppgifter. Ta bort ändå?`
+      : 'Ta bort inlägget? Det går inte att ångra.')) return;
     if (await attempt(() => api.deletePost(post.id), 'Inlägget togs bort')) {
       if (location.hash.startsWith('#/post/')) go('/'); else onChange?.();
     }
@@ -224,6 +261,42 @@ export function PostMenu({ post, onChange }) {
     <//>`}
     ${req && html`<${RequestForm} post=${post} kind=${req} onClose=${() => setReq(null)} />`}
   </span>`;
+}
+
+// Evenemang: när, var, anmälan och "lägg till i min kalender".
+export function EventBox({ post: p }) {
+  const [mine, setMine] = useState(p.rsvp_mine);
+  const [counts, setCounts] = useState({ interested: p.rsvp_interested || 0, going: p.rsvp_going || 0 });
+  const past = new Date(p.event_end || p.event_start) < new Date();
+  const url = `${location.origin}${location.pathname}#/post/${p.id}`;
+  async function rsvp(status) {
+    const next = mine === status ? null : status;
+    const c = { ...counts };
+    if (mine) c[mine]--; if (next) c[next]++;
+    const before = { mine, counts };
+    setMine(next); setCounts(c);
+    if (await attempt(() => api.setRsvp(p.id, next)) === false) { setMine(before.mine); setCounts(before.counts); }
+  }
+  function addToCalendar() {
+    const ics = eventIcs(p, url);
+    const ios = /iphone|ipad/i.test(navigator.userAgent);
+    if (ios) { location.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics); return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+    a.download = eventTitle(p).replace(/[^\wåäöÅÄÖ -]/g, '').trim().slice(0, 40) + '.ics';
+    a.click();
+  }
+  const where = [p.event_address, p.event_address?.includes(p.event_city || '§') ? null : p.event_city].filter(Boolean).join(', ');
+  return html`<div class=${'event' + (past ? ' past' : '')}>
+    <div class="event-when"><${Icon} name="calendar" size=${18} /><strong>${fmtEventTime(p)}</strong>${past && html`<span class="muted small"> · har varit</span>`}</div>
+    ${where && html`<div class="event-where">📍 ${where}</div>`}
+    ${p.event_rsvp && !past && html`<div class="event-rsvp">
+      <button class=${'btn small' + (mine === 'interested' ? ' primary' : '')} onClick=${() => rsvp('interested')}>Intresserad · ${counts.interested}</button>
+      <button class=${'btn small' + (mine === 'going' ? ' primary' : '')} onClick=${() => rsvp('going')}>Kommer · ${counts.going}</button>
+    </div>`}
+    ${!past && html`<div class="event-cal"><button class="link" onClick=${addToCalendar}>Lägg till i min kalender</button>
+      <span class="muted">·</span><a class="link" href=${googleCalendarUrl(p, url)} target="_blank" rel="noopener">Google Kalender</a></div>`}
+  </div>`;
 }
 
 // Spara i långtidsminnet: en röst per person, går att ta tillbaka.
@@ -251,7 +324,7 @@ export function PostCard({ post: p, onChange, full = false }) {
   const edited = new Date(p.updated_at) - new Date(p.created_at) > 60e3;
   // Märke uppe till höger på bilden för finansiering och lokaler.
   const kind = postType(p);
-  const badge = kind === 'finansiering' ? 'Finansiering' : kind === 'lokal' ? 'Lokal' : null;
+  const badge = p.is_event ? 'Evenemang' : kind === 'finansiering' ? 'Finansiering' : kind === 'lokal' ? 'Lokal' : null;
   return html`<article class="post">
     <div class="post-head">
       ${p.group
@@ -269,6 +342,7 @@ export function PostCard({ post: p, onChange, full = false }) {
       ${kind === 'lokal' && html`<p class="space-info">${(p.space_functions || []).join(' · ')}
         <span class="space-cost">${SPACE_COSTS[p.space_cost] || ''}${p.space_cost === 'kostar' && p.space_price ? `: ${p.space_price}` : ''}</span></p>`}
       ${kind === 'vanlig' && p.categories?.length > 0 && html`<p class="topics">${p.categories.map((c) => html`<span>#${c.toLowerCase()}</span>`)}</p>`}
+      ${p.is_event && p.event_start && html`<${EventBox} post=${p} />`}
       ${p.finance && html`<${FinanceBox} post=${p} onApply=${() => setApplying(true)} />`}
       <div class="post-actions">
         <a class="action" href=${'#/post/' + p.id} aria-label=${`${p.comment_count} kommentarer`}><${Icon} name="chat" size=${22} /><span>${p.comment_count}</span></a>
@@ -305,6 +379,10 @@ function CommentNode({ c, post, children, depth, onChange }) {
     const msg = d === 'granted' ? 'Beviljad – den finns nu i din att göra-lista' : 'Ansökan avslogs';
     if (await attempt(() => api.decideApplication(c.id, d), msg)) { refreshBadges(); onChange(); }
   }
+  async function withdraw() {
+    if (!confirm('Dra tillbaka ansökan? Den tas bort helt.')) return;
+    if (await attempt(() => api.deleteComment(c.id), 'Ansökan är tillbakadragen')) { refreshBadges(); onChange(); }
+  }
   async function reply(e) {
     e.preventDefault(); setBusy(true);
     if (await attempt(() => api.addComment(post.id, text, c.id))) { setText(''); setReplying(false); onChange(); }
@@ -330,8 +408,12 @@ function CommentNode({ c, post, children, depth, onChange }) {
           ${!collapsed && html` · <button class="link-quiet" onClick=${() => setReplying((x) => !x)}>Svara</button>`}
           ${kids.length > 0 && html` · <button class="link-quiet" onClick=${() => setCollapsed((x) => !x)}>${collapsed ? `Visa ${countAll(c.id)} svar` : 'Dölj svar'}</button>`}</div>
         ${!collapsed && mine && c.status === 'applied' && html`<div class="c-actions">
-          <button class="btn small primary" onClick=${() => decide('granted')}>Bevilja</button>
+          ${post.finance && Number(c.applied_amount) > post.finance.remaining
+            ? html`<span class="muted small">Det finns bara ${fmtKr(post.finance.remaining)} kvar.</span>`
+            : html`<button class="btn small primary" onClick=${() => decide('granted')}>Bevilja</button>`}
           <button class="btn small" onClick=${() => decide('denied')}>Avslå</button></div>`}
+        ${!collapsed && c.author.id === state.me.id && c.status === 'applied' && html`<div class="c-actions">
+          <button class="link-quiet" onClick=${withdraw}>Dra tillbaka ansökan</button></div>`}
         ${replying && html`<form class="reply-form" onSubmit=${reply}>
           <input value=${text} onInput=${(e) => setText(e.target.value)} placeholder=${`Svara ${asGroup ? c.group.name : c.author.name}…`} aria-label="Svar" autofocus />
           <button class="link strong" disabled=${!text.trim() || busy}>Skicka</button></form>`}
@@ -374,16 +456,79 @@ export const UserRow = ({ user, href }) => html`<a class="row" href=${href || '#
   <${Avatar} src=${user.avatar_url} name=${user.name} size=${44} /><span class="row-main"><strong>${user.name}</strong></span></a>`;
 
 // Bildväljare med förhandsvisning (för profilbild och gruppbild).
+// Välj bild och placera den i en cirkel: dra för att flytta, dra i reglaget (eller nyp/scrolla) för att zooma.
 export function ImagePicker({ current, name, onFile, label = 'Välj bild' }) {
   const [preview, setPreview] = useState(null);
-  return html`<label class="imgpick">
-    <${Avatar} src=${preview || current} name=${name || '?'} size=${72} />
-    <span class="link">${label}</span>
-    <input type="file" accept="image/*" hidden onChange=${(e) => {
-      const f = e.target.files[0]; if (!f) return;
-      setPreview(URL.createObjectURL(f)); onFile(f);
-    }} />
-  </label>`;
+  const [raw, setRaw] = useState(null);   // vald fil som ska beskäras
+  return html`<div class="imgpick">
+    <label class="imgpick-btn">
+      <${Avatar} src=${preview || current} name=${name || '?'} size=${72} />
+      <span class="link">${label}</span>
+      <input type="file" accept="image/*" hidden onChange=${(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) setRaw(f); }} />
+    </label>
+    ${raw && html`<${CropModal} file=${raw} onCancel=${() => setRaw(null)}
+      onDone=${(file) => { setRaw(null); setPreview(URL.createObjectURL(file)); onFile(file); }} />`}
+  </div>`;
+}
+
+const CROP = 280;   // cirkelns storlek på skärmen
+function CropModal({ file, onCancel, onDone }) {
+  const [img, setImg] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });   // bildens övre vänstra hörn i rutan
+  const pointers = useRef(new Map());
+  const pinch = useRef(null);
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    const i = new Image();
+    i.onload = () => setImg(i);
+    i.src = url;
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  const base = img ? Math.max(CROP / img.naturalWidth, CROP / img.naturalHeight) : 1;
+  const scale = base * zoom;
+  const w = img ? img.naturalWidth * scale : CROP, h = img ? img.naturalHeight * scale : CROP;
+  const clamp = (p, ww = w, hh = h) => ({ x: Math.min(0, Math.max(CROP - ww, p.x)), y: Math.min(0, Math.max(CROP - hh, p.y)) });
+  useEffect(() => { if (img) setPos(clamp({ x: (CROP - w) / 2, y: (CROP - h) / 2 })); }, [img]);
+  function zoomTo(z) {
+    z = Math.min(4, Math.max(1, z));
+    const ns = base * z, nw = img.naturalWidth * ns, nh = img.naturalHeight * ns;
+    // zooma kring mitten av cirkeln
+    const cx = (CROP / 2 - pos.x) / scale, cy = (CROP / 2 - pos.y) / scale;
+    setZoom(z); setPos(clamp({ x: CROP / 2 - cx * ns, y: CROP / 2 - cy * ns }, nw, nh));
+  }
+  const down = (e) => { e.currentTarget.setPointerCapture(e.pointerId); pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); };
+  const move = (e) => {
+    const prev = pointers.current.get(e.pointerId); if (!prev) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch.current) zoomTo(zoom * (d / pinch.current));
+      pinch.current = d;
+    } else setPos((p) => clamp({ x: p.x + e.clientX - prev.x, y: p.y + e.clientY - prev.y }));
+  };
+  const up = (e) => { pointers.current.delete(e.pointerId); if (pointers.current.size < 2) pinch.current = null; };
+  async function done() {
+    const c = document.createElement('canvas'); c.width = c.height = 512;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 512, 512);
+    ctx.drawImage(img, -pos.x / scale, -pos.y / scale, CROP / scale, CROP / scale, 0, 0, 512, 512);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.88));
+    onDone(new File([blob], 'bild.jpg', { type: 'image/jpeg' }));
+  }
+  return html`<${Modal} title="Placera bilden" onClose=${onCancel}>
+    <div class="crop" style=${{ width: CROP + 'px', height: CROP + 'px' }}
+      onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${up}
+      onWheel=${(e) => { e.preventDefault(); if (img) zoomTo(zoom * (e.deltaY < 0 ? 1.08 : 0.93)); }}>
+      ${img ? html`<img src=${img.src} alt="" draggable="false" style=${{ width: w + 'px', height: h + 'px', transform: `translate(${pos.x}px, ${pos.y}px)` }} />` : html`<${Loading} />`}
+      <span class="crop-ring"></span>
+    </div>
+    <label class="crop-zoom"><span>−</span><input type="range" min="1" max="4" step="0.01" value=${zoom} onInput=${(e) => img && zoomTo(Number(e.target.value))} aria-label="Zooma" /><span>+</span></label>
+    <p class="hint center">Dra i bilden för att flytta den.</p>
+    <div class="btnrow crop-btns"><button type="button" class="btn" onClick=${onCancel}>Avbryt</button>
+      <button type="button" class="btn primary" disabled=${!img} onClick=${done}>Använd</button></div>
+  <//>`;
 }
 
 // Gör "#/post/<id>" i meddelanden klickbart.

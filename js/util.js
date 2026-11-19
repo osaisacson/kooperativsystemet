@@ -101,7 +101,18 @@ export function normalizePostInput(input) {
     const cost = SPACE_COSTS[input.space?.cost] ? input.space.cost : 'gratis';
     space = { functions, cost, price: cost === 'kostar' ? (input.space?.price || '').trim() || null : null };
   }
-  return { groupId: input.groupId || null, caption, slides, kind, categories, isResource: kind !== 'vanlig' || categories.length > 0, finance, space };
+  let event = null;
+  if (input.event && kind !== 'finansiering') {
+    const e = input.event;
+    if (!e.date || !e.start) throw new Error('Ange datum och starttid för evenemanget.');
+    const start = new Date(`${e.date}T${e.start}`);
+    const end = e.end ? new Date(`${e.date}T${e.end}`) : null;
+    if (isNaN(start)) throw new Error('Datum eller tid ser inte rätt ut.');
+    if (end && end <= start) end.setDate(end.getDate() + 1);   // slutar efter midnatt
+    event = { start: start.toISOString(), end: end ? end.toISOString() : null, address: (e.address || '').trim() || null, postcode: e.postcode || null,
+      city: e.city || null, region: e.region || null, country: e.country || null, lat: e.lat ?? null, lng: e.lng ?? null, rsvp: e.rsvp !== false };
+  }
+  return { groupId: input.groupId || null, caption, slides, kind, categories, isResource: kind !== 'vanlig' || categories.length > 0, finance, space, event };
 }
 
 export async function resizeImage(file, max = 1280, quality = 0.82) {
@@ -148,4 +159,37 @@ export async function geocode({ address, city, region, country }) {
     } catch { /* försök nästa */ }
   }
   return null;
+}
+
+// Evenemang: fälten som sparas på inlägget.
+export const eventColumns = (ev) => ev ? {
+  is_event: true, event_start: ev.start, event_end: ev.end, event_address: ev.address, event_postcode: ev.postcode,
+  event_city: ev.city, event_region: ev.region, event_country: ev.country, event_lat: ev.lat, event_lng: ev.lng, event_rsvp: ev.rsvp,
+} : { is_event: false, event_start: null, event_end: null, event_address: null, event_postcode: null, event_city: null,
+  event_region: null, event_country: null, event_lat: null, event_lng: null, event_rsvp: true };
+
+export const eventTitle = (p) => (p.caption || '').split(/\n|(?<=[.!?])\s/)[0].slice(0, 80) || 'Evenemang';
+export const fmtEventTime = (p) => {
+  const s = new Date(p.event_start), e = p.event_end ? new Date(p.event_end) : null;
+  const day = s.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
+  const t = (d) => d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  return `${day.charAt(0).toUpperCase() + day.slice(1)} kl ${t(s)}${e ? '–' + t(e) : ''}`;
+};
+
+// Kalenderfil (.ics) för ett evenemang. Samma UID varje gång och SEQUENCE från senaste ändringen,
+// så att en ny nedladdning uppdaterar händelsen i kalendern i stället för att skapa en dubblett.
+export function eventIcs(p, url) {
+  const z = (d) => new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const esc = (t) => String(t || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, (m) => '\\' + m);
+  const end = p.event_end || new Date(new Date(p.event_start).getTime() + 2 * 3600e3).toISOString();
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kooperativsystemet//SV', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
+    `UID:${p.id}@kooperativsystemet`, `SEQUENCE:${Math.floor(new Date(p.updated_at || p.created_at).getTime() / 1000) % 2147483647}`,
+    `DTSTAMP:${z(new Date())}`, `DTSTART:${z(p.event_start)}`, `DTEND:${z(end)}`, `SUMMARY:${esc(eventTitle(p))}`,
+    `LOCATION:${esc([p.event_address, p.event_city].filter(Boolean).join(', '))}`, `DESCRIPTION:${esc(p.caption + '\n\n' + url)}`, `URL:${url}`,
+    'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+}
+export function googleCalendarUrl(p, url) {
+  const z = (d) => new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const end = p.event_end || new Date(new Date(p.event_start).getTime() + 2 * 3600e3).toISOString();
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(eventTitle(p))}&dates=${z(p.event_start)}/${z(end)}&details=${encodeURIComponent(p.caption + '\n\n' + url)}&location=${encodeURIComponent([p.event_address, p.event_city].filter(Boolean).join(', '))}`;
 }

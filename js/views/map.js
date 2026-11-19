@@ -55,7 +55,7 @@ export function MapView() {
       for (const g of placed) {
         const icon = L.divIcon({
           className: 'map-pin',
-          html: g.avatar_url ? `<img src="${esc(g.avatar_url)}" alt="" />` : `<span>${esc(g.name.slice(0, 1))}</span>`,
+          html: g.avatar_url ? `<span class="pin-img" style="background-image:url('${esc(g.avatar_url)}')"></span>` : `<span>${esc(g.name.slice(0, 1))}</span>`,
           iconSize: [40, 40], iconAnchor: [20, 20],
         });
         L.marker([g.lat, g.lng], { icon, title: g.name }).addTo(layer.current)

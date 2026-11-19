@@ -24,6 +24,7 @@ create table public.groups (
   region text,
   city text,
   address text,                              -- gatuadress eller område, visas på kartan
+  postcode text,
   lat double precision,
   lng double precision,
   avatar_url text,
@@ -65,6 +66,17 @@ create table public.posts (
   space_functions text[] not null default '{}', -- lokaler: vad lokalen kan användas till
   space_cost text check (space_cost in ('gratis', 'gentjanst', 'kostar')),
   space_price text,
+  is_event boolean not null default false,     -- evenemang: datum, tid, plats och anmälan
+  event_start timestamptz,
+  event_end timestamptz,
+  event_address text,
+  event_postcode text,
+  event_city text,
+  event_region text,
+  event_country text,
+  event_lat double precision,
+  event_lng double precision,
+  event_rsvp boolean not null default true,   -- får folk anmäla intresse?
   fin_total numeric check (fin_total is null or fin_total > 0),
   fin_mode text check (fin_mode in ('single', 'split')),
   fin_expires_at timestamptz,
@@ -326,6 +338,12 @@ begin
   values (v_c.author_id, 'decision', auth.uid(), v_post.id,
           case when p_decision = 'granted' then 'beviljade din ansökan på ' || v_c.applied_amount || ' kr'
                else 'avslog din ansökan' end);
+  -- Den som sökt får ett meddelande (syns under meddelanden uppe till höger)
+  insert into messages (from_id, to_id, body)
+  values (auth.uid(), v_c.author_id,
+          case when p_decision = 'granted'
+               then 'Er ansökan på ' || v_c.applied_amount || ' kr har beviljats. Jag hör av mig när pengarna är skickade. #/post/' || v_post.id
+               else 'Er ansökan på ' || v_c.applied_amount || ' kr fick tyvärr avslag den här gången. #/post/' || v_post.id end);
 end $$;
 
 create or replace function public.mark_paid(p_comment uuid)
@@ -339,6 +357,8 @@ begin
   update comments set status = 'paid', paid_at = now() where id = p_comment;
   insert into notifications (user_id, kind, actor_id, post_id, body)
   values (v_c.author_id, 'paid', auth.uid(), v_post.id, 'har skickat ' || v_c.applied_amount || ' kr till dig');
+  insert into messages (from_id, to_id, body)
+  values (auth.uid(), v_c.author_id, 'Nu har jag skickat ' || v_c.applied_amount || ' kr till er. #/post/' || v_post.id);
 end $$;
 
 -- Körs varje natt (se cron.sql). Om en grupp inte haft någon aktiv admin på ett år:
@@ -459,6 +479,20 @@ alter table public.memory_votes enable row level security;
 create policy "minnesröster syns" on public.memory_votes for select to authenticated using (true);
 create policy "rösta själv" on public.memory_votes for insert to authenticated with check (user_id = auth.uid());
 create policy "ta tillbaka egen röst" on public.memory_votes for delete to authenticated using (user_id = auth.uid());
+
+-- Evenemang: vem som är intresserad eller kommer.
+create table public.event_rsvps (
+  post_id uuid not null references public.posts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  status text not null check (status in ('interested', 'going')),
+  created_at timestamptz not null default now(),
+  primary key (post_id, user_id)
+);
+alter table public.event_rsvps enable row level security;
+create policy "anmälningar syns" on public.event_rsvps for select to authenticated using (true);
+create policy "anmäl dig själv" on public.event_rsvps for insert to authenticated with check (user_id = auth.uid());
+create policy "ändra egen anmälan" on public.event_rsvps for update to authenticated using (user_id = auth.uid());
+create policy "ta bort egen anmälan" on public.event_rsvps for delete to authenticated using (user_id = auth.uid());
 
 -- ---------- Bildlagring ------------------------------------------------
 

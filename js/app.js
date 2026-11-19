@@ -8,6 +8,7 @@ import { GroupView, GroupSettings, NewGroup, Welcome } from './views/groups.js';
 import { AuthView, Search, Profile, EditProfile, NewPassword } from './views/people.js';
 import { Notifications, Todos, Inbox, Thread, NewMessage } from './views/inbox.js';
 import { MapView } from './views/map.js';
+import { CalendarView } from './views/calendar.js';
 
 function parse() {
   let h = location.hash.slice(1);
@@ -24,6 +25,7 @@ function route({ parts: [a, b, c], query }) {
     case 'ny': return html`<${Compose} groupId=${query.get('grupp')} type=${query.get('typ')} />`;
     case 'notiser': return html`<${Notifications} />`;
     case 'karta': return html`<${MapView} />`;
+    case 'kalender': return html`<${CalendarView} />`;
     case 'profil': return html`<${Profile} id=${b} />`;
     case 'redigera-profil': return html`<${EditProfile} />`;
     case 'grupp': return c === 'installningar' ? html`<${GroupSettings} id=${b} />` : html`<${GroupView} id=${b} />`;
@@ -42,6 +44,7 @@ function BottomNav({ r }) {
   const item = (href, label, on, icon, n) => html`<a href=${href} aria-label=${label} class=${on ? 'on' : ''}>${icon}<${Count} n=${n} /></a>`;
   return html`<nav class="bottomnav">
     ${item('#/', 'Hem', !a, html`<${Icon} name="home" size=${26} />`)}
+    ${item('#/kalender', 'Kalender', a === 'kalender', html`<${Icon} name="calendar" size=${26} />`)}
     ${item('#/sok', 'Sök', a === 'sok', html`<${Icon} name="search" size=${26} />`)}
     ${item('#/ny', 'Nytt inlägg', a === 'ny', html`<${Icon} name="plus" size=${26} />`)}
     ${item('#/profil/' + s.me.id, 'Min profil', a === 'profil' && b === s.me.id, html`<span class="nav-avatar"><${Avatar} src=${s.me.avatar_url} name=${s.me.name} size=${26} /></span>`)}

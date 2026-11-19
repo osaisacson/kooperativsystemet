@@ -1,9 +1,9 @@
 // Demoläge: samma funktioner som supabase.js men allt sparas i webbläsarens localStorage.
 // Reglerna här speglar reglerna i supabase/setup.sql.
 import { materializeSeed } from '../seed.js';
-import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, geocode, sortCategories, resizeImage, blobToDataURL } from '../util.js';
+import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, geocode, eventColumns, sortCategories, resizeImage, blobToDataURL } from '../util.js';
 
-const KEY = 'kooperativsystemet-demo-v5';
+const KEY = 'kooperativsystemet-demo-v6';
 const subs = new Set();
 const fresh = () => ({ ...materializeSeed(), credentials: {}, session: null, notifications: [], messages: [] });
 
@@ -46,6 +46,9 @@ function shapePost(p) {
     comment_count: cs.length, finance: financeSummary(p, cs), first_comment: firstComment(cs),
     memory_count: (db.memory || []).filter((m) => m.post_id === p.id).length,
     memory_mine: (db.memory || []).some((m) => m.post_id === p.id && m.user_id === db.session),
+    rsvp_interested: (db.rsvps || []).filter((r) => r.post_id === p.id && r.status === 'interested').length,
+    rsvp_going: (db.rsvps || []).filter((r) => r.post_id === p.id && r.status === 'going').length,
+    rsvp_mine: (db.rsvps || []).find((r) => r.post_id === p.id && r.user_id === db.session)?.status || null,
   });
 }
 function firstComment(cs) {
@@ -87,9 +90,9 @@ async function buildSlides(slides) {
 }
 const place = ({ country, region, city }) => ({ country: (country || '').trim() || null, region: (region || '').trim() || null, city: (city || '').trim() || null });
 // Plats + adress + kartposition (slås upp automatiskt).
-async function located({ country, region, city, address }) {
-  const p = { ...place({ country, region, city }), address: (address || '').trim() || null };
-  const pos = await geocode(p);
+async function located({ country, region, city, address, postcode, lat, lng }) {
+  const p = { ...place({ country, region, city }), address: (address || '').trim() || null, postcode: (postcode || '').trim() || null };
+  const pos = lat != null && lng != null ? { lat, lng } : await geocode(p);   // vald adress har redan en position
   return { ...p, lat: pos?.lat ?? null, lng: pos?.lng ?? null };
 }
 function addCategories(cats) {
@@ -170,25 +173,25 @@ export const api = {
     const highlights = db.highlights.filter((h) => h.group_id === id).sort((a, b) => a.created_at.localeCompare(b.created_at));
     return clone({ ...g, members, highlights });
   },
-  async createGroup({ name, description, homepage, country, region, city, address, avatarFile }) {
+  async createGroup({ name, description, homepage, country, region, city, address, postcode, lat, lng, avatarFile }) {
     const me = needMe();
     name = (name || '').trim();
     if (!name) throw new Error('Ge gruppen ett namn.');
     if (db.groups.some((g) => g.name.toLowerCase() === name.toLowerCase())) throw new Error('Det finns redan en grupp med det namnet.');
-    const g = { id: uuid(), name, description: (description || '').trim(), homepage: normalizeUrl(homepage), ...(await located({ country, region, city, address })), avatar_url: avatarFile ? await storeImage(avatarFile, 400) : null,
+    const g = { id: uuid(), name, description: (description || '').trim(), homepage: normalizeUrl(homepage), ...(await located({ country, region, city, address, postcode, lat, lng })), avatar_url: avatarFile ? await storeImage(avatarFile, 400) : null,
       created_by: me, created_at: now(), last_activity_at: now() };
     db.groups.push(g);
     db.members.push({ group_id: g.id, user_id: me, role: 'admin', joined_at: now() });
     persist();
     return clone(g);
   },
-  async updateGroup(id, { name, description, homepage, country, region, city, address, avatarFile }) {
+  async updateGroup(id, { name, description, homepage, country, region, city, address, postcode, lat, lng, avatarFile }) {
     needAdmin(id);
     const g = db.groups.find((x) => x.id === id);
     if (name?.trim()) g.name = name.trim();
     if (description !== undefined) g.description = description.trim();
     if (homepage !== undefined) g.homepage = normalizeUrl(homepage);
-    if (country !== undefined) Object.assign(g, await located({ country, region, city, address }));
+    if (country !== undefined) Object.assign(g, await located({ country, region, city, address, postcode, lat, lng }));
     if (avatarFile) g.avatar_url = await storeImage(avatarFile, 400);
     persist();
   },
@@ -269,7 +272,7 @@ export const api = {
     const t = now();
     const post = {
       id: uuid(), author_id: me, group_id: v.groupId, caption: v.caption, kind: v.kind, is_resource: v.isResource, categories: v.categories,
-      space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null,
+      space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null, ...eventColumns(v.event),
       fin_total: v.finance?.total ?? null, fin_mode: v.finance?.mode ?? null, fin_expires_at: v.finance?.expiresAt ?? null, fin_closed: false,
       created_at: t, updated_at: t, last_activity_at: t, slides: await buildSlides(v.slides),
     };
@@ -285,7 +288,7 @@ export const api = {
     if (p.fin_total != null && !v.finance) throw new Error('Ett finansieringsinlägg kan inte byta typ. Stäng det i stället via ··· på inlägget.');
     if (v.groupId && v.groupId !== p.group_id && !membership(v.groupId, me)) throw new Error('Du kan bara posta i grupper du är med i.');
     Object.assign(p, { group_id: v.groupId, caption: v.caption, kind: v.kind, is_resource: v.isResource, categories: v.categories, updated_at: now(),
-      space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null });
+      space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null, ...eventColumns(v.event) });
     if (v.finance) {
       if (p.fin_total == null) Object.assign(p, { fin_total: v.finance.total, fin_mode: v.finance.mode });
       p.fin_expires_at = v.finance.expiresAt;
@@ -306,6 +309,29 @@ export const api = {
     db.memory = (db.memory || []).filter((m) => m.post_id !== id);
     for (const h of db.highlights) h.post_ids = h.post_ids.filter((x) => x !== id);
     persist();
+  },
+  async deleteComment(id) {
+    const me = needMe();
+    const c = db.comments.find((x) => x.id === id);
+    if (!c || c.author_id !== me) throw new Error('Du kan bara ta bort dina egna kommentarer.');
+    if (c.status === 'granted' || c.status === 'paid') throw new Error('En beviljad ansökan kan inte tas bort.');
+    const gone = new Set([id]);
+    let grew = true;
+    while (grew) { grew = false; for (const x of db.comments) if (x.parent_id && gone.has(x.parent_id) && !gone.has(x.id)) { gone.add(x.id); grew = true; } }
+    db.comments = db.comments.filter((x) => !gone.has(x.id));
+    delete db.payouts[id];
+    persist();
+  },
+  async setRsvp(postId, status) {
+    const me = needMe();
+    db.rsvps = (db.rsvps || []).filter((r) => !(r.post_id === postId && r.user_id === me));
+    if (status) db.rsvps.push({ post_id: postId, user_id: me, status, created_at: now() });
+    persist();
+  },
+  async listEvents() {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return db.posts.filter((p) => p.is_event && p.event_start && new Date(p.event_start) >= today)
+      .sort((a, b) => a.event_start.localeCompare(b.event_start)).map(shapePost);
   },
   async toggleMemory(postId) {
     const me = needMe();
@@ -365,6 +391,9 @@ export const api = {
     c.status = decision === 'granted' ? 'granted' : 'denied';
     c.decided_at = now();
     notify(c.author_id, 'decision', c.status === 'granted' ? `beviljade din ansökan på ${c.applied_amount} kr` : 'avslog din ansökan', { actor_id: me, post_id: p.id });
+    db.messages.push({ id: uuid(), from_id: me, to_id: c.author_id, read: false, created_at: now(), body: c.status === 'granted'
+      ? `Er ansökan på ${c.applied_amount} kr har beviljats. Jag hör av mig när pengarna är skickade. #/post/${p.id}`
+      : `Er ansökan på ${c.applied_amount} kr fick tyvärr avslag den här gången. #/post/${p.id}` });
     persist();
   },
   async markPaid(commentId) {
@@ -375,6 +404,7 @@ export const api = {
     if (c.status !== 'granted') throw new Error('Ansökan är inte beviljad.');
     c.status = 'paid'; c.paid_at = now();
     notify(c.author_id, 'paid', `har skickat ${c.applied_amount} kr till dig`, { actor_id: me, post_id: p.id });
+    db.messages.push({ id: uuid(), from_id: me, to_id: c.author_id, read: false, created_at: now(), body: `Nu har jag skickat ${c.applied_amount} kr till er. #/post/${p.id}` });
     persist();
   },
   async listTodos() {
