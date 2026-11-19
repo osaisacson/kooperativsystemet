@@ -2,6 +2,14 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
+// Appens egna filer frågas alltid efter hos servern (ett snabbt "har den ändrats?"), så att man aldrig får
+// en blandning av nya och gamla filer efter en uppdatering – det kunde ge en vit skärm.
+self.addEventListener('fetch', (e) => {
+  const u = new URL(e.request.url);
+  if (e.request.method !== 'GET' || u.origin !== self.location.origin || e.request.mode === 'navigate') return;
+  e.respondWith(fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).catch(() => fetch(e.request)));
+});
+
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data && e.data.text() }; }

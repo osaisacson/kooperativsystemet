@@ -20,5 +20,13 @@
   <div id="root"></div>
   <noscript>Appen behöver JavaScript.</noscript>
   <script type="module" src="js/app.js"></script>
+  <script>
+    // Om appen inte startar alls (t.ex. ingen uppkoppling) visas en knapp i stället för en vit sida.
+    setTimeout(function () {
+      var r = document.getElementById('root');
+      if (r && !r.firstChild) r.innerHTML = '<div style="padding:48px 24px;text-align:center;font:16px -apple-system,sans-serif">'
+        + '<p>Appen kunde inte starta. Kolla uppkopplingen.</p><button onclick="location.reload()" style="font:inherit;padding:10px 18px;border-radius:10px;border:0;background:#2f6b4f;color:#fff">Ladda om</button></div>';
+    }, 12000);
+  </script>
 </body>
 </html>
