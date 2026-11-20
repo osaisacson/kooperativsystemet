@@ -25,7 +25,7 @@ export function CalendarSetting({ prompt = false }) {
   const webcal = url && url.replace(/^https:/, 'webcal:');
   const google = url && `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}`;
   async function copy() { try { await navigator.clipboard.writeText(url); toast('Länken är kopierad'); } catch { window.prompt('Kopiera länken:', url); } mark(); }
-  const intro = html`<span><b>Dina evenemang i din kalender.</b> Det du trycker <b>Intresserad</b> eller <b>Kommer</b> på (och dina egna evenemang) hamnar automatiskt i din vanliga kalender – och uppdateras om tid eller plats ändras.</span>`;
+  const intro = html`<span><b>Vill du se evenemang i din egen kalender?</b> Det du trycker <b>Intresserad</b> eller <b>Kommer</b> på (och dina egna evenemang) hamnar automatiskt i din vanliga kalender – och uppdateras om tid eller plats ändras.</span>`;
   if (prompt && !open) return html`<div class="nudge badge-setting">
     ${intro}
     <span class="btnrow"><button class="btn small primary" onClick=${() => setOpen(true)}>Lägg till</button>

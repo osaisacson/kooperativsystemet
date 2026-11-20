@@ -745,3 +745,5 @@ a.todo small { display: block; }
 .cal-btns { flex-wrap: wrap; }
 .cal-sub { display: block; margin: 8px 16px 4px; font-size: 14px; }
 #kalender { scroll-margin-top: 110px; }
+.profile-tools { display: inline-flex; gap: 2px; }
+@media (min-width: 760px) { .profile-tools { display: none; } }   /* finns i sidomenyn */
