@@ -68,8 +68,13 @@ export function PlaceSwitcher({ groups }) {
     ${picking && html`<${PlacePicker} level=${picking} place=${place} groups=${groups} onClose=${() => setPicking(null)} />`}`;
 }
 
-// Byt plats på en nivå: skriv för att söka. Platser i samma land/region/stad som nu visas först.
-function PlacePicker({ level, place, groups, onClose }) {
+const SCALE = [['world', 'Världen'], ['country', 'Land'], ['region', 'Region'], ['city', 'Stad'], ['district', 'Stadsdel']];
+const OTHER = { region: 'Andra regioner', city: 'Andra städer', district: 'Andra stadsdelar' };
+
+// Byt plats: överst en skala från hela världen till stadsdel (tryck på ett steg för att välja på den nivån),
+// under den ett sökfält och listan – först platserna i det man har valt (t.ex. städerna i Västra Götaland), sedan resten.
+function PlacePicker({ level: startLevel, place, groups, onClose }) {
+  const [level, setLevel] = useState(startLevel);
   const [q, setQ] = useState('');
   const [found, setFound] = useState(null);   // stadsdel som slagits upp från ett postnummer
   const opts = placeOptions(groups)[level];
@@ -104,24 +109,44 @@ function PlacePicker({ level, place, groups, onClose }) {
     setPlace({ ...base, ...extra });
     onClose();
   }
+  const parentName = parentKey && place[parentKey];
+  const nearList = parentName ? list.filter((o) => !near(o)) : list;
+  const farList = parentName ? list.filter(near) : [];
+  const depth = LEVELS.indexOf(place.level);
+  const stepValue = (l) => (l === 'world' ? '' : l === 'district' ? place.district || (place.postcode ? fmtPostcode(place.postcode) : '') : place[l] || '');
+  const row = (o, showWhere) => html`<button class=${'sheet-item place-opt' + (isOn(o) ? ' on' : '')} onClick=${() => pick(o)}>
+      <span class="place-opt-main">${label(o)}${showWhere ? sub(o) && html`<small class="muted">${sub(o)}</small>`
+        : level === 'district' && names[pcKey(o.postcode)] && html`<small class="muted">${fmtPostcode(o.postcode)}</small>`}</span>
+      <small class="muted">${o.n} ${o.n === 1 ? 'grupp' : 'grupper'}</small></button>`;
   const exact = list.some((o) => lc(label(o)) === needle);
   const free = q.trim() && level !== 'district' && !exact;
   return html`<${Sheet} onClose=${onClose}>
-    <div class="pick-head">
-      <div class="pick-title">Byt ${LEVEL_TITLE[level]}</div>
-      <input type="search" class="scale-search" value=${q} onInput=${(e) => setQ(e.target.value)} autofocus
+    <div class="scale">
+      <div class="scale-title">Hur stort område vill du se?</div>
+      <div class="scale-steps" role="tablist">
+        ${SCALE.map(([l, t], i) => html`<button role="tab" aria-selected=${l === level}
+            class=${'scale-step' + (i <= depth ? ' in' : '') + (l === place.level ? ' cur' : '') + (l === level ? ' sel' : '')}
+            onClick=${() => (l === 'world' ? (setPlace({ ...place, level: 'world' }), onClose()) : (setLevel(l), setQ('')))}>
+          <span class="scale-dot" aria-hidden="true"></span>
+          <span class="scale-label">${t}</span>
+          <span class="scale-val">${l === 'world' ? '' : stepValue(l) || 'Välj…'}</span>
+        </button>`)}
+      </div>
+      <input type="search" class="scale-search" value=${q} onInput=${(e) => setQ(e.target.value)} key=${level}
         inputmode=${level === 'district' ? 'numeric' : undefined}
-        placeholder=${level === 'district' ? 'Skriv ett postnummer' : `Skriv namnet på ${{ country: 'ett land', region: 'en region', city: 'en stad' }[level]}`} aria-label="Sök plats" />
+        placeholder=${level === 'district' ? 'Sök stadsdel eller skriv ett postnummer' : `Sök ${LEVEL_TITLE[level]}`} aria-label="Sök plats" />
     </div>
     ${level === 'district' && digits.length === 5 && found !== null && html`<button class="sheet-item place-opt" disabled=${!found}
         onClick=${() => found && pick({ postcode: fmtPostcode(digits), city: found.city || place.city, region: found.region || (found.city ? null : place.region), country: found.country || place.country }, { district: found.district || null })}>
       <span class="place-opt-main">${found ? found.district || `Postnummer ${fmtPostcode(digits)}` : 'Hittar inte det postnumret'}<small class="muted">${found ? [fmtPostcode(digits), found.city].filter(Boolean).join(' · ') : ''}</small></span></button>`}
-    ${list.map((o) => html`<button class=${'sheet-item place-opt' + (isOn(o) ? ' on' : '')} onClick=${() => pick(o)}>
-      <span class="place-opt-main">${label(o)}${sub(o) && html`<small class="muted">${sub(o)}</small>`}</span>
-      <small class="muted">${o.n} ${o.n === 1 ? 'grupp' : 'grupper'}</small></button>`)}
+    ${parentName && html`<div class="sheet-label">I ${parentName}</div>`}
+    ${nearList.map((o) => row(o, !parentName))}
+    ${parentName && !nearList.length && html`<p class="empty small">${needle ? 'Inget som matchar här.' : `Inga grupper i ${parentName} har angett det än.`}</p>`}
+    ${farList.length > 0 && html`<div class="sheet-label">${OTHER[level]}</div>`}
+    ${farList.map((o) => row(o, true))}
     ${free && html`<button class="sheet-item place-opt" onClick=${() => pick({ [level]: q.trim().replace(/^./, (m) => m.toUpperCase()) })}>
       <span class="place-opt-main">Visa ”${q.trim()}”<small class="muted">Inga grupper där än</small></span></button>`}
-    ${!list.length && !free && !(level === 'district' && digits.length === 5) && html`<p class="empty small">${needle ? 'Inget som matchar.' : 'Inga grupper har angett det än.'}</p>`}
+    ${!parentName && !list.length && !free && !(level === 'district' && digits.length === 5) && html`<p class="empty small">${needle ? 'Inget som matchar.' : 'Inga grupper har angett det än.'}</p>`}
   <//>`;
 }
 
