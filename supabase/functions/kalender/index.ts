@@ -12,8 +12,8 @@ const esc = (t: string) => String(t || '').replace(/\\/g, '\\\\').replace(/\n/g,
 const title = (c: string) => (c || '').split(/\n|(?<=[.!?])\s/)[0].slice(0, 80) || 'Evenemang';
 
 function ics(posts: any[], feed = false) {
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kooperativsystemet//SV', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
-  if (feed) lines.push('X-WR-CALNAME:Kooperativsystemet', 'X-WR-TIMEZONE:Europe/Stockholm', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H');
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Omställningsplatser//SV', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  if (feed) lines.push('X-WR-CALNAME:Omställningsplatser', 'X-WR-TIMEZONE:Europe/Stockholm', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H');
   for (const p of posts) {
     if (!p.event_start) continue;
     const end = p.event_end || new Date(new Date(p.event_start).getTime() + 2 * 3600e3).toISOString();
@@ -54,6 +54,6 @@ Deno.serve(async (req) => {
     : { data: [] };
 
   return new Response(ics(posts || [], true), {
-    headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'max-age=900', 'Content-Disposition': 'inline; filename="kooperativsystemet.ics"' },
+    headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'max-age=900', 'Content-Disposition': 'inline; filename="omstallningsplatser.ics"' },
   });
 });

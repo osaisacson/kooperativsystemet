@@ -3,7 +3,7 @@
 import { materializeSeed } from '../seed.js';
 import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, geocode, eventColumns, sortCategories, resizeImage, blobToDataURL } from '../util.js';
 
-const KEY = 'kooperativsystemet-demo-v7';
+const KEY = 'kooperativsystemet-demo-v7';   // nyckeln behålls så att befintlig demodata finns kvar
 const subs = new Set();
 const fresh = () => ({ ...materializeSeed(), credentials: {}, session: null, notifications: [], messages: [] });
 
@@ -18,6 +18,17 @@ function load() {
   return d;
 }
 let db = load();
+// Redaktionen, anmälningar, historik och feedback (läggs till i äldre demodata också).
+db.editors ??= [db.profiles[0]?.id, db.profiles[1]?.id].filter(Boolean);
+db.reports ??= [];
+db.editorLog ??= [];
+db.feedback ??= [
+  { id: uuid0(), author_id: db.profiles[1]?.id, title: 'Visa evenemang på kartan också', body: 'Det vore smidigt att se vad som händer i närheten direkt på kartan.', status: 'planerad', created_at: new Date(Date.now() - 3 * 864e5).toISOString() },
+  { id: uuid0(), author_id: db.profiles[2]?.id, title: 'Mörkt läge', body: '', status: null, created_at: new Date(Date.now() - 864e5).toISOString() },
+];
+db.feedbackVotes ??= db.feedback.flatMap((f, i) => db.profiles.slice(0, 4 - i * 2).map((p) => ({ feedback_id: f.id, user_id: p.id, value: 1 })));
+db.feedbackComments ??= [];
+function uuid0() { return crypto.randomUUID(); }
 
 const now = () => new Date().toISOString();
 const uuid = () => crypto.randomUUID();
@@ -72,6 +83,33 @@ function ensureAdmin(gid) {
   m.role = 'admin';
   notify(m.user_id, 'admin', `Du är nu admin för ${groupOf(gid).name} eftersom gruppen saknade admin.`, { group_id: gid });
 }
+function needEditor() { const me = needMe(); if (!db.editors.includes(me)) throw new Error('Bara Redaktionen kan göra det.'); return me; }
+function log(actor_id, action, target_id, summary) { db.editorLog.push({ id: uuid(), actor_id, action, target_id, summary, created_at: now(), reverted_at: null, reverted_by: null }); }
+function removeFeedback(id) {
+  db.feedback = db.feedback.filter((x) => x.id !== id);
+  db.feedbackVotes = db.feedbackVotes.filter((x) => x.feedback_id !== id);
+  db.feedbackComments = db.feedbackComments.filter((x) => x.feedback_id !== id);
+}
+function removeUser(id) {
+  const postIds = new Set(db.posts.filter((p) => p.author_id === id).map((p) => p.id));
+  db.posts = db.posts.filter((p) => !postIds.has(p.id));
+  db.comments = db.comments.filter((c) => c.author_id !== id && !postIds.has(c.post_id));
+  const gids = db.members.filter((m) => m.user_id === id).map((m) => m.group_id);
+  db.members = db.members.filter((m) => m.user_id !== id);
+  gids.forEach(ensureAdmin);
+  db.profiles = db.profiles.filter((p) => p.id !== id);
+  db.messages = db.messages.filter((m) => m.from_id !== id && m.to_id !== id);
+  db.notifications = db.notifications.filter((n) => n.user_id !== id);
+  db.editors = db.editors.filter((x) => x !== id);
+  db.feedback.filter((f) => f.author_id === id).forEach((f) => removeFeedback(f.id));
+  for (const [email, c] of Object.entries(db.credentials)) if (c.id === id) delete db.credentials[email];
+}
+const shapeFeedback = (f) => {
+  const v = db.feedbackVotes.filter((x) => x.feedback_id === f.id);
+  return { ...clone(f), author: profileOf(f.author_id), score: v.reduce((n, x) => n + x.value, 0), ups: v.filter((x) => x.value > 0).length,
+    downs: v.filter((x) => x.value < 0).length, my_vote: v.find((x) => x.user_id === db.session)?.value || 0,
+    comment_count: db.feedbackComments.filter((c) => c.feedback_id === f.id).length };
+};
 const usedAmount = (pid) => db.comments
   .filter((c) => c.post_id === pid && (c.status === 'granted' || c.status === 'paid'))
   .reduce((s, c) => s + Number(c.applied_amount), 0);
@@ -106,7 +144,10 @@ export const api = {
 
   // ---- Konto ----
   onAuthChange(cb) { subs.add(cb); return () => subs.delete(cb); },
-  async getMe() { return db.session ? clone(db.profiles.find((p) => p.id === db.session) || null) : null; },
+  async getMe() {
+    const me = db.session && db.profiles.find((p) => p.id === db.session);
+    return me ? { ...clone(me), is_editor: db.editors.includes(me.id) } : null;
+  },
   async signUp({ email, password, name, nickname, avatarFile, home }) {
     email = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Ange en giltig e-postadress.');
@@ -117,6 +158,7 @@ export const api = {
     const avatar_url = avatarFile ? await storeImage(avatarFile, 400) : null;
     db.profiles.push({ id, name: name.trim(), nickname: (nickname || '').trim() || null, avatar_url, home: home ? clone(home) : null, created_at: now(), last_seen_at: now() });
     db.credentials[email] = { id, hash: await sha(password) };
+    db.editors.push(id);   // i demoläget är man med i Redaktionen, så att man kan prova
     db.session = id;
     persist(); emit();
     return { needsConfirmation: false };
@@ -151,7 +193,7 @@ export const api = {
   async getUser(id) {
     const p = db.profiles.find((x) => x.id === id);
     if (!p) throw new Error('Användaren finns inte.');
-    return clone({ ...profileOf(id), nickname: p.nickname || null, created_at: p.created_at,
+    return clone({ ...profileOf(id), nickname: p.nickname || null, created_at: p.created_at, is_editor: db.editors.includes(id),
       groups: db.members.filter((m) => m.user_id === id).map((m) => ({ ...groupOf(m.group_id), role: m.role })) });
   },
 
@@ -464,6 +506,124 @@ export const api = {
     persist();
   },
 
+  // ---- Redaktionen ----
+  async listEditors() {
+    return { editors: db.editors.map(profileOf), groupId: db.groups.find((g) => g.name === 'Omställningsplatser')?.id || null };
+  },
+  async setEditor(uid, on) {
+    const me = needEditor();
+    const has = db.editors.includes(uid);
+    if (on && !has) { db.editors.push(uid); log(me, 'editor_add', uid, `lade till ${profileOf(uid).name} i Redaktionen`); notify(uid, 'admin', 'lade till dig i Redaktionen', { actor_id: me }); }
+    if (!on && has) {
+      if (db.editors.length <= 1) throw new Error('Redaktionen måste ha minst en person.');
+      db.editors = db.editors.filter((x) => x !== uid); log(me, 'editor_remove', uid, `tog bort ${profileOf(uid).name} ur Redaktionen`);
+    }
+    persist();
+  },
+  async report(kind, id, name, reason) {
+    const me = needMe();
+    if (!reason?.trim()) throw new Error('Skriv kort vad det gäller.');
+    db.reports.push({ id: uuid(), kind, target_id: id, target_name: name || null, reason: reason.trim(), reporter_id: me, created_at: now(), done_at: null, done_by: null });
+    for (const e of db.editors) if (e !== me) notify(e, 'report', `anmälde ${name || 'något'}: ”${reason.trim().slice(0, 120)}” – finns i Redaktionens checklista`, { actor_id: me });
+    persist();
+  },
+  async editorTodos() {
+    if (!db.editors.includes(db.session)) return { reports: [], log: [] };
+    return {
+      reports: [...db.reports].sort((a, b) => b.created_at.localeCompare(a.created_at)).map((r) => ({ ...clone(r), reporter: profileOf(r.reporter_id), doer: r.done_by ? profileOf(r.done_by) : null })),
+      log: [...db.editorLog].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 30).map((l) => ({ ...clone(l), actor: profileOf(l.actor_id), reverter: l.reverted_by ? profileOf(l.reverted_by) : null })),
+    };
+  },
+  async setReportDone(id, done) {
+    const me = needEditor();
+    const r = db.reports.find((x) => x.id === id);
+    if (!r) throw new Error('Anmälan finns inte.');
+    r.done_at = done ? now() : null; r.done_by = done ? me : null;
+    if (done) log(me, 'report_done', id, `bockade av anmälan om ${r.target_name || 'innehåll'}: ”${r.reason.slice(0, 80)}”`);
+    persist();
+  },
+  async revertLog(id) {
+    const me = needEditor();
+    const l = db.editorLog.find((x) => x.id === id);
+    if (!l || l.reverted_at) throw new Error('Redan ångrat.');
+    if (l.action === 'report_done') { const r = db.reports.find((x) => x.id === l.target_id); if (r) { r.done_at = null; r.done_by = null; } }
+    else if (l.action === 'editor_add') { if (db.editors.length <= 1) throw new Error('Redaktionen måste ha minst en person.'); db.editors = db.editors.filter((x) => x !== l.target_id); }
+    else if (l.action === 'editor_remove') { if (!db.editors.includes(l.target_id)) db.editors.push(l.target_id); }
+    else if (l.action === 'feedback_status') { const f = db.feedback.find((x) => x.id === l.target_id); if (f) f.status = null; }
+    else throw new Error('Det här går inte att ångra.');
+    l.reverted_at = now(); l.reverted_by = me;
+    if (l.actor_id !== me) notify(l.actor_id, 'admin', `ångrade att du ${l.summary}`, { actor_id: me });
+    persist();
+  },
+  async editorDelete(kind, id) {
+    const me = needEditor();
+    let n;
+    if (kind === 'post') { const p = db.posts.find((x) => x.id === id); n = p && `inlägget ”${(p.caption || 'inlägg').slice(0, 60)}”`; if (p) { p.author_id = me; await api.deletePost(id); } }
+    else if (kind === 'group') { const g = db.groups.find((x) => x.id === id); n = g && `gruppen ${g.name}`; if (g) { db.members.push({ group_id: id, user_id: me, role: 'admin', joined_at: now() }); await api.deleteGroup(id); } }
+    else if (kind === 'user') {
+      if (id === me) throw new Error('Ta bort ditt eget konto under Hjälp → Radera ditt konto.');
+      const u = db.profiles.find((x) => x.id === id); n = u && `användaren ${u.name}`; if (u) removeUser(id);
+    } else if (kind === 'feedback') { const f = db.feedback.find((x) => x.id === id); n = f && `feedbacken ”${f.title.slice(0, 60)}”`; if (f) removeFeedback(id); }
+    if (!n) throw new Error('Det finns inte (längre).');
+    for (const r of db.reports) if (r.target_id === id && !r.done_at) { r.done_at = now(); r.done_by = me; }
+    log(me, 'delete_' + kind, id, 'tog bort ' + n);
+    persist();
+  },
+  async deleteMyAccount() {
+    const me = needMe();
+    if (db.editors.includes(me) && db.editors.length <= 1) throw new Error('Du är sista personen i Redaktionen. Lägg till någon annan först.');
+    removeUser(me);
+    db.session = null; persist(); emit();
+  },
+
+  // ---- Feedback på appen ----
+  async listFeedback() { return db.feedback.map(shapeFeedback).sort((a, b) => b.created_at.localeCompare(a.created_at)); },
+  async getFeedback(id) {
+    const f = db.feedback.find((x) => x.id === id);
+    if (!f) throw new Error('Inlägget finns inte (längre).');
+    return { ...shapeFeedback(f), comments: db.feedbackComments.filter((c) => c.feedback_id === id).sort((a, b) => a.created_at.localeCompare(b.created_at)).map((c) => ({ ...clone(c), author: profileOf(c.author_id) })) };
+  },
+  async createFeedback({ title, body }) {
+    const me = needMe();
+    if ((title || '').trim().length < 3) throw new Error('Skriv en rubrik (minst tre tecken).');
+    const f = { id: uuid(), author_id: me, title: title.trim(), body: (body || '').trim(), status: null, created_at: now() };
+    db.feedback.push(f); db.feedbackVotes.push({ feedback_id: f.id, user_id: me, value: 1 });
+    persist(); return f.id;
+  },
+  async voteFeedback(id, value) {
+    const me = needMe();
+    db.feedbackVotes = db.feedbackVotes.filter((v) => !(v.feedback_id === id && v.user_id === me));
+    if (value) db.feedbackVotes.push({ feedback_id: id, user_id: me, value });
+    persist();
+  },
+  async commentFeedback(id, body) {
+    const me = needMe();
+    if (!body?.trim()) throw new Error('Skriv något först.');
+    db.feedbackComments.push({ id: uuid(), feedback_id: id, author_id: me, body: body.trim(), created_at: now() });
+    persist();
+  },
+  async deleteFeedback(id) {
+    const f = db.feedback.find((x) => x.id === id);
+    if (f && f.author_id === needMe()) { removeFeedback(id); persist(); } else await api.editorDelete('feedback', id);
+  },
+  async deleteFeedbackComment(id) {
+    const me = needMe();
+    const c = db.feedbackComments.find((x) => x.id === id);
+    if (!c || (c.author_id !== me && !db.editors.includes(me))) throw new Error('Det gick inte att ta bort.');
+    db.feedbackComments = db.feedbackComments.filter((x) => x.id !== id); persist();
+  },
+  async setFeedbackStatus(id, status) {
+    const me = needEditor();
+    const f = db.feedback.find((x) => x.id === id);
+    if (!f) throw new Error('Finns inte.');
+    f.status = status || null;
+    if (status) {
+      log(me, 'feedback_status', id, `satte ”${f.title.slice(0, 60)}” som ${status}`);
+      if (f.author_id !== me) notify(f.author_id, 'admin', `markerade din feedback ”${f.title.slice(0, 60)}” som ${status}`, { actor_id: me });
+    }
+    persist();
+  },
+
   async badges() {
     const me = db.session;
     if (!me) return { notifications: 0, messages: 0, todos: 0 };
@@ -471,7 +631,8 @@ export const api = {
     return {
       notifications: db.notifications.filter((n) => n.user_id === me && !n.read).length,
       messages: db.messages.filter((m) => m.to_id === me && !m.read).length,
-      todos: db.comments.filter((c) => mine.has(c.post_id) && (c.status === 'granted' || c.status === 'applied')).length,
+      todos: db.comments.filter((c) => mine.has(c.post_id) && (c.status === 'granted' || c.status === 'applied')).length
+        + (db.editors.includes(me) ? db.reports.filter((r) => !r.done_at).length : 0),
     };
   },
 };

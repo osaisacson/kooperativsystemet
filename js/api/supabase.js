@@ -8,6 +8,7 @@ import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, geocod
 let recovering = /type=recovery/.test(location.hash);
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let meId = null;
+let meEditor = false;
 let linkError = null;
 
 // Länken i vårt eget återställningsmejl pekar direkt på appen: ?token_hash=…&type=recovery
@@ -58,6 +59,11 @@ function shapePost(p) {
     rsvp_mine: (p.event_rsvps || []).find((r) => r.user_id === meId)?.status || null, event_rsvps: undefined,
   };
 }
+// Poäng = upp minus ner; min röst följer med.
+const shapeFeedback = ({ feedback_votes: v = [], feedback_comments: c = [], ...f }) => ({
+  ...f, score: v.reduce((n, x) => n + x.value, 0), ups: v.filter((x) => x.value > 0).length, downs: v.filter((x) => x.value < 0).length,
+  my_vote: v.find((x) => x.user_id === meId)?.value || 0, comment_count: c[0]?.count ?? 0,
+});
 const place = ({ country, region, city }) => ({ country: (country || '').trim() || null, region: (region || '').trim() || null, city: (city || '').trim() || null });
 // Plats + adress + kartposition (slås upp automatiskt).
 const cleanHome = (h) => ({ country: (h.country || '').trim() || null, region: (h.region || '').trim() || null, city: (h.city || '').trim() || null,
@@ -100,11 +106,13 @@ export const api = {
     const { data: { session } } = await sb.auth.getSession();
     meId = session?.user?.id ?? null;
     if (!meId) return null;
-    const [me, home] = await Promise.all([
+    const [me, home, editor] = await Promise.all([
       sb.from('profiles').select('*').eq('id', meId).maybeSingle().then(ok),
       sb.from('home_places').select('*').eq('user_id', meId).maybeSingle().then((r) => r.data ?? null, () => null),
+      sb.from('editors').select('user_id').eq('user_id', meId).maybeSingle().then((r) => !!r.data, () => false),
     ]);
-    return me && { ...me, home };
+    meEditor = editor;
+    return me && { ...me, home, is_editor: editor };
   },
   async signUp({ email, password, name, nickname, avatarFile, home }) {
     if (!name.trim()) throw new Error('Skriv ditt namn.');
@@ -150,7 +158,8 @@ export const api = {
   async getUser(id) {
     const p = ok(await sb.from('profiles').select(`${PROFILE}, nickname, created_at, group_members(role, group:groups(id,name,avatar_url))`).eq('id', id).single());
     const { group_members, ...rest } = p;
-    return { ...rest, groups: group_members.map((m) => ({ ...m.group, role: m.role })) };
+    const editor = ok(await sb.from('editors').select('user_id').eq('user_id', id)).length > 0;
+    return { ...rest, is_editor: editor, groups: group_members.map((m) => ({ ...m.group, role: m.role })) };
   },
 
   // ---- Grupper ----
@@ -340,14 +349,76 @@ export const api = {
     ok(await sb.from('messages').insert({ from_id: needMe(), to_id: userId, body: body.trim() }));
   },
 
+  // ---- Redaktionen ----
+  async listEditors() {
+    const [rows, grp] = await Promise.all([
+      sb.from('editors').select(`added_at, user:profiles!editors_user_id_fkey(${PROFILE})`).order('added_at').then(ok),
+      sb.from('groups').select('id').eq('name', 'Omställningsplatser').limit(1).maybeSingle().then((r) => r.data, () => null),
+    ]);
+    return { editors: rows.map((r) => r.user), groupId: grp?.id || null };
+  },
+  async setEditor(uid, on) { ok(await sb.rpc('set_editor', { p_user: uid, p_on: !!on })); },
+  async report(kind, id, name, reason) {
+    if (!reason?.trim()) throw new Error('Skriv kort vad det gäller.');
+    ok(await sb.from('reports').insert({ kind, target_id: id, target_name: name || null, reason: reason.trim(), reporter_id: needMe() }));
+  },
+  async editorTodos() {
+    if (!meEditor) return { reports: [], log: [] };
+    const [reports, log] = await Promise.all([
+      sb.from('reports').select(`*, reporter:profiles!reports_reporter_id_fkey(${PROFILE}), doer:profiles!reports_done_by_fkey(${PROFILE})`).order('created_at', { ascending: false }).limit(100).then(ok),
+      sb.from('editor_log').select(`*, actor:profiles!editor_log_actor_id_fkey(${PROFILE}), reverter:profiles!editor_log_reverted_by_fkey(${PROFILE})`).order('created_at', { ascending: false }).limit(30).then(ok),
+    ]);
+    return { reports, log };
+  },
+  async setReportDone(id, done) { ok(await sb.rpc('set_report_done', { p_id: id, p_done: !!done })); },
+  async revertLog(id) { ok(await sb.rpc('revert_log', { p_id: id })); },
+  async editorDelete(kind, id) { ok(await sb.rpc('editor_delete', { p_kind: kind, p_id: id })); },
+  async deleteMyAccount() { ok(await sb.rpc('delete_my_account')); await sb.auth.signOut(); meId = null; },
+
+  // ---- Feedback på appen ----
+  async listFeedback() {
+    const rows = ok(await sb.from('feedback').select(`*, author:profiles(${PROFILE}), feedback_votes(user_id,value), feedback_comments(count)`).order('created_at', { ascending: false }).limit(300));
+    return rows.map(shapeFeedback);
+  },
+  async getFeedback(id) {
+    const f = ok(await sb.from('feedback').select(`*, author:profiles(${PROFILE}), feedback_votes(user_id,value), feedback_comments(count)`).eq('id', id).maybeSingle());
+    if (!f) throw new Error('Inlägget finns inte (längre).');
+    const comments = ok(await sb.from('feedback_comments').select(`*, author:profiles(${PROFILE})`).eq('feedback_id', id).order('created_at'));
+    return { ...shapeFeedback(f), comments };
+  },
+  async createFeedback({ title, body }) {
+    if ((title || '').trim().length < 3) throw new Error('Skriv en rubrik (minst tre tecken).');
+    const f = ok(await sb.from('feedback').insert({ title: title.trim(), body: (body || '').trim(), author_id: needMe() }).select('id').single());
+    ok(await sb.from('feedback_votes').insert({ feedback_id: f.id, user_id: needMe(), value: 1 }));
+    return f.id;
+  },
+  async voteFeedback(id, value) {
+    if (!value) ok(await sb.from('feedback_votes').delete().eq('feedback_id', id).eq('user_id', needMe()));
+    else ok(await sb.from('feedback_votes').upsert({ feedback_id: id, user_id: needMe(), value }, { onConflict: 'feedback_id,user_id' }));
+  },
+  async commentFeedback(id, body) {
+    if (!body?.trim()) throw new Error('Skriv något först.');
+    ok(await sb.from('feedback_comments').insert({ feedback_id: id, author_id: needMe(), body: body.trim() }));
+  },
+  async deleteFeedback(id) {
+    const rows = ok(await sb.from('feedback').delete().eq('id', id).select('id'));
+    if (!rows.length) await api.editorDelete('feedback', id);
+  },
+  async deleteFeedbackComment(id) {
+    const rows = ok(await sb.from('feedback_comments').delete().eq('id', id).select('id'));
+    if (!rows.length) throw new Error('Det gick inte att ta bort.');
+  },
+  async setFeedbackStatus(id, status) { ok(await sb.rpc('set_feedback_status', { p_id: id, p_status: status || null })); },
+
   async badges() {
     if (!meId) return { notifications: 0, messages: 0, todos: 0 };
     const count = async (q) => (await q).count ?? 0;
-    const [notifications, messages, todos] = await Promise.all([
+    const [notifications, messages, todos, reports] = await Promise.all([
       count(sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', meId).eq('read', false)),
       count(sb.from('messages').select('id', { count: 'exact', head: true }).eq('to_id', meId).eq('read', false)),
       count(sb.from('comments').select('id, post:posts!inner(author_id)', { count: 'exact', head: true }).in('status', ['applied', 'granted']).eq('post.author_id', meId)),
+      meEditor ? count(sb.from('reports').select('id', { count: 'exact', head: true }).is('done_at', null)) : 0,
     ]);
-    return { notifications, messages, todos };
+    return { notifications, messages, todos: todos + reports };
   },
 };

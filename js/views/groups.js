@@ -2,7 +2,7 @@
 import { html, useState } from '../lib.js';
 import { api } from '../api/index.js';
 import { useStore, useAsync, go, attempt, refreshMe, toast } from '../store.js';
-import { Icon, Avatar, Header, PostGrid, GroupRow, Modal, ImagePicker, Loading, ErrorBox, AddressPicker } from '../ui.js';
+import { Icon, Avatar, Header, PostGrid, GroupRow, Modal, ImagePicker, Loading, ErrorBox, AddressPicker, ReportForm, editorDelete } from '../ui.js';
 import { prettyUrl, countryNames } from '../util.js';
 import { HomePlaceFields, checkHome, emptyHome } from './place.js';
 
@@ -33,6 +33,7 @@ export function GroupView({ id }) {
   const posts = useAsync(() => api.listPosts({ groupId: id }), [id]);
   const [hl, setHl] = useState(null); // { highlight, edit }
   const [showMembers, setShowMembers] = useState(false);
+  const [reporting, setReporting] = useState(false);
   if (g.loading && !g.data) return html`<div class="page"><${Header} title="" back /><${Loading} /></div>`;
   if (g.error) return html`<div class="page"><${Header} title="" back /><${ErrorBox} error=${g.error} /></div>`;
   const grp = g.data;
@@ -87,6 +88,12 @@ export function GroupView({ id }) {
 
     <div class="grid-sep"></div>
     <${PostGrid} posts=${list} showAuthor empty="Gruppen har inga inlägg än." />
+
+    <div class="page-foot">
+      ${!admin && html`<button class="link muted" onClick=${() => setReporting(true)}>Anmäl gruppen</button>`}
+      ${s.me.is_editor && html`<button class="link danger" onClick=${async () => { if (await editorDelete('group', id, `gruppen ${grp.name} och alla dess inlägg`)) { await refreshMe(); go('/'); } }}>Ta bort gruppen (Redaktionen)</button>`}
+    </div>
+    ${reporting && html`<${ReportForm} kind="group" id=${id} name=${grp.name} onClose=${() => setReporting(false)} />`}
 
     ${hl && !hl.edit && html`<${Modal} title=${hl.highlight.title} onClose=${() => setHl(null)}>
       <${PostGrid} posts=${list.filter((p) => hl.highlight.post_ids.includes(p.id))} showAuthor empty="Inga inlägg i den här höjdpunkten än." />

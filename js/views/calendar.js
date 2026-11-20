@@ -1,10 +1,9 @@
-// Kalendern: kommande evenemang, filtrerade på vald stad/region/land och på postnummer.
+// Evenemang: kommande evenemang, filtrerade på vald plats (världen, land, region, stad eller stadsdel).
 import { html, useState } from '../lib.js';
 import { api } from '../api/index.js';
-import { useStore, useAsync, toast } from '../store.js';
+import { useAsync, toast } from '../store.js';
 import { Avatar, Loading, ErrorBox } from '../ui.js';
-import { inPlace, placeLabel, eventTitle } from '../util.js';
-import { PlaceSwitcher } from './place.js';
+import { inPlace, eventTitle } from '../util.js';
 
 // Var evenemanget äger rum – evenemangets egen plats, annars gruppens.
 // Har evenemanget en egen plats används den helt (även postnumret, för stadsdelen).
@@ -32,11 +31,9 @@ function Subscribe() {
   </div>`;
 }
 
-export function CalendarView() {
-  const s = useStore();
+// Fliken Events i flödet: kommande evenemang i vald plats, dag för dag.
+export function EventsList({ place, empty }) {
   const events = useAsync(() => api.listEvents(), []);
-  const groups = useAsync(() => api.listGroups(), []);
-  const place = s.place || { level: 'world' };
   const list = (events.data || []).filter((p) => inPlace(eventPlace(p), place));
 
   // Gruppera per dag
@@ -56,13 +53,10 @@ export function CalendarView() {
   };
   const time = (iso) => new Date(iso).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
 
-  return html`<div class="page">
-    <header class="topbar brand"><${PlaceSwitcher} groups=${groups.data || []} />
-      <a class="chip-add" href="#/ny?typ=evenemang" aria-label="Nytt evenemang" style="margin-left:auto"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></a></header>
+  return html`<div class="events">
     <${Subscribe} />
     ${events.loading && !events.data ? html`<${Loading} />` : events.error ? html`<${ErrorBox} error=${events.error} />`
-      : !days.length ? html`<p class="empty">Inga kommande evenemang i ${placeLabel(place)}.
-          <br /><span class="small">Tryck på <b>+</b> uppe till höger för att lägga upp ett.</span></p>`
+      : !days.length ? empty
       : days.map((d) => html`<section class="cal-day" key=${d.key}>
           <h2 class="cal-date">${dayLabel(d.date)}</h2>
           ${d.items.map((p) => html`<a class="cal-item" href=${'#/post/' + p.id} key=${p.id}>

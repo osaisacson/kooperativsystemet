@@ -235,7 +235,7 @@ export function eventIcs(p, url) {
   const z = (d) => new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const esc = (t) => String(t || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, (m) => '\\' + m);
   const end = p.event_end || new Date(new Date(p.event_start).getTime() + 2 * 3600e3).toISOString();
-  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kooperativsystemet//SV', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Omställningsplatser//SV', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
     `UID:${p.id}@kooperativsystemet`, `SEQUENCE:${Math.floor(new Date(p.updated_at || p.created_at).getTime() / 1000) % 2147483647}`,
     `DTSTAMP:${z(new Date())}`, `DTSTART:${z(p.event_start)}`, `DTEND:${z(end)}`, `SUMMARY:${esc(eventTitle(p))}`,
     `LOCATION:${esc([p.event_address, p.event_city].filter(Boolean).join(', '))}`, `DESCRIPTION:${esc(p.caption + '\n\n' + url)}`, `URL:${url}`,

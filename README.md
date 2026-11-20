@@ -1,4 +1,4 @@
-# Kooperativsystemet
+# Omställningsplatser
 
 En app för grupper som arbetar med småskaliga omställningar av vatten, avfall, energi, ekonomi med mera.
 Inlägg hör till grupper. Inlägg kan vara vanliga inlägg (med ämnen), **lokaler** att låna eller hyra, eller

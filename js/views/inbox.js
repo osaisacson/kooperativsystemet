@@ -5,6 +5,46 @@ import { useStore, useAsync, go, goBack, attempt, refreshBadges } from '../store
 import { Icon, Avatar, Header, UserRow, Loading, ErrorBox, linkify } from '../ui.js';
 import { fmtKr, timeAgo } from '../util.js';
 
+const KIND = { post: 'Inlägg', group: 'Grupp', user: 'Användare', feedback: 'Feedback' };
+const targetHref = (r) => ({ post: '#/post/', group: '#/grupp/', user: '#/profil/', feedback: '#/feedback/' }[r.kind] + r.target_id);
+
+// Anmälningar som hela Redaktionen delar, och en kort historik över vad som gjorts (som går att ångra).
+function EditorChecklist() {
+  const t = useAsync(() => api.editorTodos(), []);
+  const [showDone, setShowDone] = useState(false);
+  const reports = t.data?.reports || [];
+  const open = reports.filter((r) => !r.done_at);
+  const done = reports.filter((r) => r.done_at);
+  async function check(r, on) {
+    if (await attempt(() => api.setReportDone(r.id, on), on ? 'Avbockad – syns i historiken' : 'Öppnad igen')) { refreshBadges(); t.reload(); }
+  }
+  async function revert(l) {
+    if (!confirm(`Ångra: ${l.actor?.name || 'någon'} ${l.summary}?` + (l.actor?.id ? ' Hen får en notis om att det ångrades.' : ''))) return;
+    if (await attempt(() => api.revertLog(l.id), 'Ångrat – noterat i historiken')) { refreshBadges(); t.reload(); }
+  }
+  const reversible = (l) => !l.reverted_at && ['report_done', 'editor_add', 'editor_remove', 'feedback_status'].includes(l.action);
+  const item = (r) => html`<label class=${'todo' + (r.done_at ? ' done' : '')} key=${r.id}>
+    <input type="checkbox" checked=${!!r.done_at} onChange=${(e) => check(r, e.target.checked)} />
+    <span><span class="kind-tag">${KIND[r.kind]}</span> <a href=${targetHref(r)}><strong>${r.target_name || 'Öppna'}</strong></a>
+      <small>”${r.reason}”</small>
+      <small class="muted">Anmält av ${r.reporter?.name || 'okänd'} · ${timeAgo(r.created_at)}${r.done_at ? ` · avbockad av ${r.doer?.name || '?'}` : ''}</small></span>
+  </label>`;
+  if (t.loading && !t.data) return html`<${Loading} />`;
+  return html`<section class="todo-sec">
+    <h2 class="todo-title">Redaktionens checklista</h2>
+    <p class="muted small pad-x">Anmälningar från användarna. Öppna det som anmälts, ta bort det om det bryter mot villkoren (via ··· eller längst ner på sidan) och bocka av.</p>
+    ${open.length ? html`<div class="list">${open.map(item)}</div>` : html`<p class="muted small pad-x">Inga anmälningar att gå igenom.</p>`}
+    ${done.length > 0 && html`<button class="link small pad-x" onClick=${() => setShowDone((x) => !x)}>${showDone ? 'Dölj' : 'Visa'} avbockade (${done.length})</button>
+      ${showDone && html`<div class="list">${done.map(item)}</div>`}`}
+    ${t.data?.log.length > 0 && html`<details class="history"><summary>Historik</summary>
+      <ul>${t.data.log.map((l) => html`<li key=${l.id} class=${l.reverted_at ? 'reverted' : ''}>
+        <span><b>${l.actor?.name || 'Någon'}</b> ${l.summary} <small class="muted">${timeAgo(l.created_at)}</small>
+          ${l.reverted_at && html`<small class="notice">Ångrat av ${l.reverter?.name || '?'} ${timeAgo(l.reverted_at)}</small>`}</span>
+        ${reversible(l) && html`<button class="link small" onClick=${() => revert(l)}>Ångra</button>`}
+      </li>`)}</ul></details>`}
+  </section>`;
+}
+
 export function Notifications() {
   const n = useAsync(async () => {
     const list = await api.listNotifications();
@@ -24,6 +64,7 @@ export function Notifications() {
 }
 
 export function Todos() {
+  const s = useStore();
   const t = useAsync(() => api.listTodos(), []);
   async function pay(x) {
     if (!confirm(`Har du skickat ${fmtKr(x.applied_amount)} till ${x.group?.name || x.author.name}?`)) return;
@@ -45,15 +86,19 @@ export function Todos() {
   };
   return html`<div class="page">
     <${Header} title="Checklista" back />
+    ${s.me.is_editor && html`<${EditorChecklist} />`}
+    <section class="todo-sec">
+    ${s.me.is_editor && html`<h2 class="todo-title">Finansiering</h2>`}
     <p class="intro muted">Här hamnar det du behöver göra för finansiering du har lagt upp: ansökningar att bevilja eller avslå, och pengar att betala ut. Bocka av när du har betalat.</p>
     ${t.loading && !t.data ? html`<${Loading} />` : t.error ? html`<${ErrorBox} error=${t.error} />` : html`
-      ${!decide.length && !open.length && html`<p class="empty">Checklistan är tom just nu.</p>`}
+      ${!decide.length && !open.length && html`<p class="empty">Inget att göra för finansiering just nu.</p>`}
       ${decide.length > 0 && html`<div class="label pad-x">Ansökningar att besluta om</div>
         <div class="list">${decide.map((x) => html`<a class="todo" key=${x.id} href=${'#/post/' + x.post.id}>
           <span class="todo-dot" aria-hidden="true"></span>
           <span>${who(x)} söker ${fmtKr(x.applied_amount)}<small class="muted">Öppna inlägget för att bevilja eller avslå</small></span></a>`)}</div>`}
       ${open.length > 0 && html`<div class="label pad-x">Att betala ut</div><div class="list">${open.map(payItem)}</div>`}
       ${done.length > 0 && html`<div class="label pad-x">Klart</div><div class="list">${done.map(payItem)}</div>`}`}
+    </section>
   </div>`;
 }
 

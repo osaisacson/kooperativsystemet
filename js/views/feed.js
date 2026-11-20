@@ -64,12 +64,13 @@ const PLUS = html`<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="t
 
 export { PlaceSwitcher } from './place.js';
 import { PlaceSwitcher } from './place.js';
+import { EventsList } from './calendar.js';
 
-const TABS = [['flode', 'Flöde'], ['finansiering', 'Finansiering'], ['lokal', 'Lokaler'], ['minne', 'Minne']];
+const TABS = [['flode', 'Flöde'], ['finansiering', 'Finansiering'], ['lokal', 'Lokaler'], ['evenemang', 'Events'], ['minne', 'Minne']];
 
-export function Home() {
+export function Home({ tab: startTab }) {
   const s = useStore();
-  const [tab, setTab] = useState(() => { try { return sessionStorage.getItem('tab') || 'flode'; } catch { return 'flode'; } });
+  const [tab, setTab] = useState(() => { try { return startTab || sessionStorage.getItem('tab') || 'flode'; } catch { return startTab || 'flode'; } });
   const [fn, setFn] = useState('');        // Lokaler: användningsområde (fritext)
   const [cost, setCost] = useState('');    // Lokaler: kostnad (fritext)
   const [memQ, setMemQ] = useState('');    // Minne: sökfält för ämnen
@@ -102,7 +103,7 @@ export function Home() {
       <${PlaceSwitcher} groups=${groups.data || []} />
       <a class="iconbtn map-btn" href="#/karta" aria-label="Visa grupperna på kartan" title="Karta"><${Icon} name="map" /></a>
       <div class="topbar-side right">
-        ${s.badges.todos > 0 && html`<a class="iconbtn" href="#/att-gora" aria-label="Checklista"><${Icon} name="check" /><${Count} n=${s.badges.todos} /></a>`}
+        ${(s.badges.todos > 0 || s.me.is_editor) && html`<a class="iconbtn" href="#/att-gora" aria-label="Checklista"><${Icon} name="check" /><${Count} n=${s.badges.todos} /></a>`}
         <a class="iconbtn" href="#/meddelanden" aria-label="Meddelanden"><${Icon} name="chat" /><${Count} n=${s.badges.messages} /></a>
       </div>
     </header>
@@ -120,16 +121,17 @@ export function Home() {
 
     <div class="filterbar" role="tablist">
       ${TABS.map(([k, label]) => html`<button role="tab" aria-selected=${tab === k} class=${tab === k ? 'on' : ''} onClick=${() => choose(k)}>
-        ${label}${k === 'finansiering' && available > 0 ? html` <span class="tab-sum">${fmtKr(available)}</span>` : ''}</button>`)}
+        ${label}</button>`)}
     </div>
     <div class="tab-head">
       <div class="tab-info">
         ${tab === 'flode' && html`<span class="muted small">Allt från grupperna i ${where}</span>`}
-        ${tab === 'finansiering' && html`<span class="muted small">Pengar som grupper i ${where} kan söka just nu</span>`}
+        ${tab === 'finansiering' && html`<span class="muted small">Pengar som grupper i ${where} kan söka just nu${available > 0 ? html` – totalt <b class="avail">${fmtKr(available)}</b> tillgängligt` : ''}.</span>`}
+        ${tab === 'evenemang' && html`<span class="muted small">Kommande evenemang i ${where}, dag för dag</span>`}
         ${tab === 'lokal' && html`<span class="muted small">Lokaler att låna, använda mot en gentjänst eller hyra i ${where}</span>`}
         ${tab === 'minne' && html`<span class="muted small">Inlägg som är värda att minnas, för att andra kan ha nytta av dem. Tryck på <${Icon} name="memory" size=${13} /> längst ner till höger i ett inlägg för att spara det här.</span>`}
       </div>
-      ${tab !== 'minne' && html`<a class="chip-add" href=${'#/ny?typ=' + (tab === 'flode' ? 'vanlig' : tab)} aria-label=${{ flode: 'Nytt inlägg', finansiering: 'Ny finansiering', lokal: 'Ny lokal' }[tab]}>${PLUS}</a>`}
+      ${tab !== 'minne' && html`<a class="chip-add" href=${'#/ny?typ=' + (tab === 'flode' ? 'vanlig' : tab)} aria-label=${{ flode: 'Nytt inlägg', finansiering: 'Ny finansiering', lokal: 'Ny lokal', evenemang: 'Nytt evenemang' }[tab]}>${PLUS}</a>`}
     </div>
     ${tab === 'lokal' && html`<div class="space-filters">
       <label><input list="dl-fn" value=${fn} onInput=${(e) => setFn(e.target.value)} placeholder="Användning" aria-label="Filtrera på användning" />
@@ -147,7 +149,9 @@ export function Home() {
       </div>`}
     </div>`}
 
-    ${posts.loading && !posts.data ? html`<${Loading} />` : posts.error ? html`<${ErrorBox} error=${posts.error} />`
+    ${tab === 'evenemang' ? html`<${EventsList} place=${place} empty=${html`<p class="empty">Inga kommande evenemang i ${where}.
+          ${place.level !== 'world' && html`<br /><span class="small">Tryck på <b>‹</b> högst upp för att zooma ut till ${placeLabel(zoomOut(place))}.</span>`}</p>`} />`
+      : posts.loading && !posts.data ? html`<${Loading} />` : posts.error ? html`<${ErrorBox} error=${posts.error} />`
       : shown.length === 0 ? html`<p class="empty">${{ flode: 'Inga inlägg', finansiering: 'Ingen finansiering att söka', lokal: 'Inga lokaler', minne: 'Inget sparat i långtidsminnet' }[tab]} i ${where}${(fn || cost || memTags.length || memQ) ? ' som matchar' : ' än'}.
           ${place.level !== 'world' && html`<br /><span class="small">Tryck på <b>‹</b> högst upp för att zooma ut till ${placeLabel(zoomOut(place))}.</span>`}</p>`
       : html`<div class="feed">${shown.map((p) => html`<${PostCard} key=${p.id} post=${p} onChange=${posts.reload} />`)}</div>`}
@@ -189,7 +193,7 @@ const plusDays = (d) => new Date(Date.now() + d * 864e5).toISOString().slice(0, 
 const FORM_TYPES = { vanlig: 'Vanlig post', evenemang: 'Evenemang', finansiering: 'Tillgänglig finansiering', lokal: 'Lokal att låna eller hyra' };
 const TYPE_HELP = {
   vanlig: 'Syns i flödet, i gruppen och på din profil.',
-  evenemang: 'Något som händer en viss dag: får tid och plats, syns i kalendern och folk kan anmäla sig.',
+  evenemang: 'Något som händer en viss dag: får tid och plats, syns under Events och folk kan anmäla sig.',
   finansiering: 'Pengar som andra grupper kan söka. Syns under Finansiering.',
   lokal: 'En lokal andra kan låna, använda mot en gentjänst eller hyra. Syns under Lokaler.',
 };

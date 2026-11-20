@@ -3,7 +3,8 @@ import { html, useState, useEffect } from '../lib.js';
 import { api } from '../api/index.js';
 import { APP_NAME, AUTH_PROVIDERS, VAPID_PUBLIC_KEY } from '../config.js';
 import { useStore, useAsync, go, attempt, refreshMe, refreshBadges, setState, toast } from '../store.js';
-import { Avatar, Header, PostGrid, GroupRow, UserRow, ImagePicker, Loading, ErrorBox } from '../ui.js';
+import { Avatar, Header, PostGrid, GroupRow, UserRow, ImagePicker, Loading, ErrorBox, ReportForm, editorDelete } from '../ui.js';
+import { Terms } from './help.js';
 import { HomePlaceFields, checkHome, emptyHome } from './place.js';
 
 const PROVIDERS = {
@@ -30,6 +31,7 @@ export function AuthView() {
   const [nickname, setNickname] = useState('');
   const [file, setFile] = useState(null);
   const [home, setHome] = useState(emptyHome);
+  const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [info, setInfo] = useState('');
@@ -42,6 +44,7 @@ export function AuthView() {
         setInfo('Om det finns ett konto med den adressen har vi skickat ett mejl med en länk. Hittar du det inte? Titta i skräpposten.');
         return;
       } else {
+        if (!agree) { setErr('Bekräfta att du är minst 13 år och godkänner villkoren.'); return; }
         const bad = checkHome(home);
         if (bad) { setErr(bad); return; }
         const r = await api.signUp({ email, password, name, nickname, avatarFile: file, home });
@@ -57,7 +60,7 @@ export function AuthView() {
   const switchTo = (m) => { setMode(m); setErr(''); setInfo(''); };
   return html`<div class="auth">
     <img class="auth-logo" src="icon.svg" alt="" width="72" height="72" />
-    <h1 class="logo big">SOS<small class="logo-sub">Småskaliga Omkonfigurationer av Samhället</small></h1>
+    <h1 class="logo big">Omställningsplatser<small class="logo-sub">Småskaliga omkonfigurationer av samhället</small></h1>
     <form class="form card" onSubmit=${submit}>
       ${!reset && html`<${ProviderButtons} />`}
       ${reset && html`<p><strong>Glömt lösenordet?</strong><br /><span class="muted">Skriv din e-postadress så skickar vi en länk där du kan välja ett nytt.</span></p>`}
@@ -66,7 +69,10 @@ export function AuthView() {
         <label>Smeknamn <small>(valfritt)</small><input autocomplete="nickname" value=${nickname} onInput=${(e) => setNickname(e.target.value)} /></label>`}
       <label>E-post<input required type="email" autocomplete="email" value=${email} onInput=${(e) => setEmail(e.target.value)} /></label>
       ${!reset && html`<label>Lösenord<input required type="password" minlength="6" autocomplete=${signup ? 'new-password' : 'current-password'} value=${password} onInput=${(e) => setPassword(e.target.value)} /></label>`}
-      ${signup && html`<${HomePlaceFields} value=${home} onChange=${setHome} groups=${places.data} />`}
+      ${signup && html`<${HomePlaceFields} value=${home} onChange=${setHome} groups=${places.data} />
+        <label class="check terms-check"><input type="checkbox" checked=${agree} onChange=${(e) => setAgree(e.target.checked)} />
+          <span>Jag är minst 13 år och godkänner <a href="#" onClick=${(e) => { e.preventDefault(); e.currentTarget.closest('form').querySelector('.terms-text').toggleAttribute('open'); }}>villkoren</a>.</span></label>
+        <details class="terms-text"><summary>Villkoren</summary><${Terms} /></details>`}
       ${mode === 'login' && html`<button type="button" class="link small forgot" onClick=${() => switchTo('reset')}>Glömt lösenordet?</button>`}
       ${info && html`<p class="info">${info}</p>`}
       ${err && html`<p class="error">${err}</p>`}
@@ -126,10 +132,12 @@ export function Profile({ id }) {
   const u = useAsync(() => api.getUser(id), [id]);
   const posts = useAsync(() => api.listPosts({ authorId: id }), [id]);
   const isMe = id === s.me.id;
+  const [reporting, setReporting] = useState(false);
   if (u.loading && !u.data) return html`<div class="page"><${Header} title="" back=${!isMe} /><${Loading} /></div>`;
   if (u.error) return html`<div class="page"><${Header} title="" back /><${ErrorBox} error=${u.error} /></div>`;
   const user = u.data;
   async function logout() { await api.signOut(); await refreshMe(); go('/'); }
+  const editorAct = async (fn, msg) => { if (await attempt(fn, msg)) { await refreshMe(); u.reload(); } };
   return html`<div class="page">
     <${Header} title=${user.name} back=${!isMe} />
     <div class="profile-head">
@@ -139,7 +147,8 @@ export function Profile({ id }) {
         <div><b>${user.groups.length}</b><span>grupper</span></div>
       </div>
     </div>
-    <div class="profile-info"><strong>${user.name}</strong>${user.nickname && html` <span class="muted">"${user.nickname}"</span>`}</div>
+    <div class="profile-info"><strong>${user.name}</strong>${user.nickname && html` <span class="muted">"${user.nickname}"</span>`}
+      ${user.is_editor && html`<a class="role-badge" href="#/hjalp" title="Redaktionen representerar gruppen Omställningsplatser">Redaktionen</a>`}</div>
     ${(isMe || user.groups.length > 0) && html`<${GroupIcons} groups=${user.groups} canAdd=${isMe} />`}
     <div class="profile-actions">
       ${isMe
@@ -150,6 +159,16 @@ export function Profile({ id }) {
     ${isMe && user.groups.length === 0 && html`<p class="muted small pad-x">Du är inte med i någon grupp än – tryck på <b>+</b> för att gå med i en eller skapa en ny.</p>`}
     <div class="grid-sep"></div>
     ${posts.data ? html`<${PostGrid} posts=${posts.data} />` : html`<${Loading} />`}
+    <div class="page-foot">
+      ${!isMe && html`<button class="link muted" onClick=${() => setReporting(true)}>Anmäl användaren</button>`}
+      ${s.me.is_editor && html`<span class="editor-tools">
+        ${user.is_editor
+          ? html`<button class="link" onClick=${() => confirm(isMe ? 'Lämna Redaktionen?' : `Ta bort ${user.name} ur Redaktionen?`) && editorAct(() => api.setEditor(id, false), isMe ? 'Du har lämnat Redaktionen' : `${user.name} är inte längre med i Redaktionen`)}>${isMe ? 'Lämna Redaktionen' : 'Ta bort ur Redaktionen'}</button>`
+          : html`<button class="link" onClick=${() => confirm(`Lägga till ${user.name} i Redaktionen? Då kan hen ta bort inlägg, grupper och konton.`) && editorAct(() => api.setEditor(id, true), `${user.name} är nu med i Redaktionen`)}>Lägg till i Redaktionen</button>`}
+        ${!isMe && html`<button class="link danger" onClick=${async () => { if (await editorDelete('user', id, `användaren ${user.name} och allt hen lagt upp`)) go('/'); }}>Ta bort användaren</button>`}
+      </span>`}
+    </div>
+    ${reporting && html`<${ReportForm} kind="user" id=${id} name=${user.name} onClose=${() => setReporting(false)} />`}
   </div>`;
 }
 
@@ -169,7 +188,7 @@ export function NewPassword() {
   }
   return html`<div class="auth">
     <img class="auth-logo" src="icon.svg" alt="" width="72" height="72" />
-    <h1 class="logo big">SOS<small class="logo-sub">Småskaliga Omkonfigurationer av Samhället</small></h1>
+    <h1 class="logo big">Omställningsplatser<small class="logo-sub">Småskaliga omkonfigurationer av samhället</small></h1>
     <form class="form card" onSubmit=${submit}>
       <p><strong>Välj ett nytt lösenord</strong></p>
       <label>Nytt lösenord<input required type="password" minlength="6" autocomplete="new-password" value=${pw} onInput=${(e) => setPw(e.target.value)} autofocus /></label>

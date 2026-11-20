@@ -22,6 +22,10 @@ const ICONS = {
   map: '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>',
   bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.3-2.4 3.8"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
+  add: '<path d="M12 5v14M5 12h14"/>',
+  up: '<path d="M12 5 5 13h4.5v6h5v-6H19z"/>',
+  down: '<path d="M12 19l7-8h-4.5V5h-5v6H5z"/>',
   layers: '<rect x="8" y="3" width="13" height="13" rx="2"/><path d="M16 21H5a2 2 0 0 1-2-2V8"/>',
 };
 export const Icon = ({ name, size = 24 }) => html`<svg class="icon" width=${size} height=${size} viewBox="0 0 24 24" fill="none"
@@ -212,6 +216,30 @@ export function ApplyForm({ post, onClose, onDone }) {
     </form><//>`;
 }
 
+// Anmäl ett inlägg, en grupp, en användare eller feedback till Redaktionen.
+export function ReportForm({ kind, id, name, onClose }) {
+  const [reason, setReason] = useState('');
+  const what = { post: 'inlägget', group: 'gruppen', user: 'användaren', feedback: 'inlägget' }[kind];
+  async function submit(e) {
+    e.preventDefault();
+    if (await attempt(() => api.report(kind, id, name, reason), 'Tack! Redaktionen tittar på det.')) onClose();
+  }
+  return html`<${Modal} title=${'Anmäl ' + what} onClose=${onClose}>
+    <form class="form" onSubmit=${submit}>
+      <p class="muted">Anmälan går till Redaktionen, som tittar på den så snart de kan. Den du anmäler får inte veta vem som anmälde.</p>
+      <label>Vad är problemet?
+        <textarea required rows="4" value=${reason} onInput=${(e) => setReason(e.target.value)} placeholder="T.ex. spam, kränkande, olagligt, falsk grupp…"></textarea></label>
+      <button class="btn primary block">Skicka anmälan</button>
+      <small class="muted">Är någon i fara eller är det ett brott – kontakta polisen (112 eller 114 14).</small>
+    </form><//>`;
+}
+
+// Redaktionen tar bort något (loggas och kan inte ångras).
+export async function editorDelete(kind, id, label) {
+  if (!confirm(`Ta bort ${label} som Redaktionen? Det går inte att ångra, men det syns i Redaktionens historik.`)) return false;
+  return attempt(() => api.editorDelete(kind, id), 'Borttaget');
+}
+
 function RequestForm({ post, kind, onClose }) {
   const [msg, setMsg] = useState('');
   const label = kind === 'edit' ? 'Be om ändring' : 'Be om borttagning';
@@ -233,7 +261,9 @@ function RequestForm({ post, kind, onClose }) {
 export function PostMenu({ post, onChange }) {
   const [open, setOpen] = useState(false);
   const [req, setReq] = useState(null);
+  const [reporting, setReporting] = useState(false);
   const mine = post.author_id === state.me.id;
+  const editor = state.me.is_editor;
   const admin = post.group_id && state.adminOf.has(post.group_id);
   async function del() {
     const unpaid = post.finance?.granted > 0;
@@ -253,7 +283,11 @@ export function PostMenu({ post, onChange }) {
   } else {
     items.push(['Be om ändring', () => setReq('edit')]);
     items.push(['Be om borttagning', () => setReq('remove')]);
+    items.push(['Anmäl till Redaktionen', () => setReporting(true)]);
     if (admin) items.push(['Ta bort (som gruppadmin)', del, 'danger']);
+    else if (editor) items.push(['Ta bort (Redaktionen)', async () => {
+      if (await editorDelete('post', post.id, 'inlägget')) { if (location.hash.startsWith('#/post/')) go('/'); else onChange?.(); }
+    }, 'danger']);
   }
   if (!location.hash.startsWith('#/post/')) items.push(['Gå till inlägget', () => go('/post/' + post.id)]);
   return html`<span>
@@ -262,6 +296,7 @@ export function PostMenu({ post, onChange }) {
       ${items.map(([label, fn, cls]) => html`<button class=${'sheet-item ' + (cls || '')} onClick=${() => { setOpen(false); fn(); }}>${label}</button>`)}
     <//>`}
     ${req && html`<${RequestForm} post=${post} kind=${req} onClose=${() => setReq(null)} />`}
+    ${reporting && html`<${ReportForm} kind="post" id=${post.id} name=${(post.caption || 'Inlägg').slice(0, 60)} onClose=${() => setReporting(false)} />`}
   </span>`;
 }
 

@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
   webpush.setVapidDetails(s.vapid_subject || 'mailto:kooperativsystemet@gmail.com', s.vapid_public, s.vapid_private);
 
   const { type, id } = await req.json();
-  let to: string | null = null, title = 'Kooperativsystemet', body = '', url = './';
+  let to: string | null = null, title = 'Omställningsplatser', body = '', url = './';
   if (type === 'messages') {
     const { data: m } = await sb.from('messages').select('from_id, to_id, body, sender:profiles!messages_from_id_fkey(name)').eq('id', id).single();
     if (!m) return new Response('ok');
