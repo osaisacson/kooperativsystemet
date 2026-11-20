@@ -744,3 +744,4 @@ a.todo small { display: block; }
 .cal-setting { flex-direction: column; align-items: stretch; gap: 10px; }
 .cal-btns { flex-wrap: wrap; }
 .cal-sub { display: block; margin: 8px 16px 4px; font-size: 14px; }
+#kalender { scroll-margin-top: 110px; }
