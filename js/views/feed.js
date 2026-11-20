@@ -63,34 +63,66 @@ function InstallHint() {
 const PLUS = html`<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
 
 // Platsväljaren överst: stad → region → land → hela världen, plus andra städer där det finns grupper.
+// Alla platser där det finns grupper, per nivå, med antal grupper. Samma regler som inPlace().
+function placeOptions(groups) {
+  const maps = { country: new Map(), region: new Map(), city: new Map() };
+  const add = (level, key, o) => { const m = maps[level]; const x = m.get(key) || { ...o, level, n: 0 }; x.n++; m.set(key, x); };
+  for (const g of groups) {
+    const c = (g.country || '').toLowerCase();
+    if (g.country) add('country', c, { country: g.country });
+    if (g.region) add('region', `${c}|${g.region.toLowerCase()}`, { region: g.region, country: g.country });
+    if (g.city) add('city', `${c}|${g.city.toLowerCase()}`, { city: g.city, region: g.region, country: g.country });
+  }
+  const sort = (m, k) => [...m.values()].sort((a, b) => b.n - a.n || a[k].localeCompare(b[k], 'sv'));
+  return { country: sort(maps.country, 'country'), region: sort(maps.region, 'region'), city: sort(maps.city, 'city') };
+}
+
+const SCALE = [['world', 'Hela världen'], ['country', 'Land'], ['region', 'Region'], ['city', 'Stad']];
+
+// Platsväljaren överst: en skala från hela världen ner till en stad. Varje steg visar vad som är valt;
+// trycker man på Land, Region eller Stad visas de platser där det finns grupper, med sökfält.
 export function PlaceSwitcher({ groups }) {
   const s = useStore();
-  const [open, setOpen] = useState(false);
   const place = s.place || { level: 'world' };
-  const base = place.level === 'world' ? null : place;
-  const options = [];
-  if (base?.city) options.push({ level: 'city', city: base.city, region: base.region, country: base.country });
-  if (base?.region) options.push({ level: 'region', region: base.region, country: base.country });
-  if (base?.country) options.push({ level: 'country', country: base.country });
-  options.push({ level: 'world' });
-  const seen = new Set(options.filter((o) => o.level === 'city').map((o) => o.city.toLowerCase()));
-  const others = [];
-  for (const g of groups) {
-    if (!g.city || seen.has(g.city.toLowerCase())) continue;
-    seen.add(g.city.toLowerCase());
-    others.push({ level: 'city', city: g.city, region: g.region, country: g.country });
-  }
-  others.sort((a, b) => a.city.localeCompare(b.city, 'sv'));
-  const same = (a, b) => a.level === b.level && placeLabel(a) === placeLabel(b);
-  const pick = (o) => { setPlace(o); setOpen(false); };
-  const row = (o) => html`<button class=${'sheet-item place-opt' + (same(o, place) ? ' on' : '')} onClick=${() => pick(o)}>
-    <span>${placeLabel(o)}</span>${o.level !== 'world' && html`<small class="muted">${PLACE_LEVELS[o.level]}</small>`}</button>`;
-  return html`<button class="place-btn" onClick=${() => setOpen(true)} aria-label=${`Visar ${placeLabel(place)}. Byt plats`}>
+  const [open, setOpen] = useState(false);
+  const [level, setLevel] = useState(place.level === 'world' ? 'country' : place.level);
+  const [q, setQ] = useState('');
+  const opts = open ? placeOptions(groups) : null;
+  const pick = ({ n, ...o }) => { setPlace(o); setOpen(false); setQ(''); };
+  const show = () => { setLevel(place.level === 'world' ? 'country' : place.level); setQ(''); setOpen(true); };
+  // Det som är valt på varje nivå (en stad har också ett land och en region)
+  const current = { world: true, country: place.country, region: place.region, city: place.city };
+  const depth = SCALE.findIndex(([l]) => l === place.level);
+  const isOn = (o) => o.level === place.level && placeLabel(o).toLowerCase() === placeLabel(place).toLowerCase()
+    && (o.country || '').toLowerCase() === (place.country || '').toLowerCase();
+  const where = (o) => [o.level === 'city' && o.region, o.level !== 'country' && o.country].filter(Boolean).join(', ');
+  const needle = q.trim().toLowerCase();
+  const list = opts && level !== 'world' ? opts[level].filter((o) => !needle || placeLabel(o).toLowerCase().includes(needle) || where(o).toLowerCase().includes(needle)) : [];
+
+  return html`<button class="place-btn" onClick=${show} aria-label=${`Visar ${placeLabel(place)}. Byt plats`}>
       <span class="place-name">${placeLabel(place)}<span class="chev" aria-hidden="true">▾</span></span>
     </button>
     ${open && html`<${Sheet} onClose=${() => setOpen(false)}>
-      ${options.map(row)}
-      ${others.length > 0 && html`<div class="sheet-label">Andra städer</div>${others.map(row)}`}
+      <div class="scale">
+        <div class="scale-title">Hur stort område vill du se?</div>
+        <div class="scale-steps" role="tablist">
+          ${SCALE.map(([l, label], i) => html`<button role="tab" aria-selected=${l === level}
+              class=${'scale-step' + (i <= depth ? ' in' : '') + (l === place.level ? ' cur' : '') + (l === level ? ' sel' : '')}
+              onClick=${() => (l === 'world' ? pick({ level: 'world' }) : (setLevel(l), setQ('')))}>
+            <span class="scale-dot" aria-hidden="true"></span>
+            <span class="scale-label">${label}</span>
+            <span class="scale-val">${l === 'world' ? '' : (i <= depth && current[l]) || 'Välj…'}</span>
+          </button>`)}
+        </div>
+      </div>
+      <div class="scale-pick">
+        ${opts[level].length > 6 && html`<input type="search" class="scale-search" value=${q} onInput=${(e) => setQ(e.target.value)}
+          placeholder=${'Sök ' + { country: 'land', region: 'region', city: 'stad' }[level]} aria-label="Sök plats" />`}
+        ${list.map((o) => html`<button class=${'sheet-item place-opt' + (isOn(o) ? ' on' : '')} onClick=${() => pick(o)}>
+          <span class="place-opt-main">${placeLabel(o)}${where(o) && html`<small class="muted">${where(o)}</small>`}</span>
+          <small class="muted">${o.n} ${o.n === 1 ? 'grupp' : 'grupper'}</small></button>`)}
+        ${!list.length && html`<p class="empty small">${needle ? 'Inget som matchar.' : 'Inga grupper har angett det än.'}</p>`}
+      </div>
     <//>`}`;
 }
 
