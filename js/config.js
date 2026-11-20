@@ -1,6 +1,6 @@
 // Appens namn – byt fritt.
 export const APP_NAME = 'Omställningsplatser';
-export const CONTACT_EMAIL = 'kooperativsystemet@gmail.com';
+export const CONTACT_EMAIL = 'omstallningsplatser@gmail.com';
 
 // Fyll i från Supabase → Project Settings → API ("Project URL" och "anon public"-nyckeln).
 // Lämnas de tomma körs appen i demoläge: all data sparas bara i den här webbläsaren.

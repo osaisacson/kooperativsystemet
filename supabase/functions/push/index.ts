@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
   const { data: rows } = await sb.from('app_settings').select('key, value');
   const s = Object.fromEntries((rows || []).map((r) => [r.key, r.value]));
   if (!s.push_secret || req.headers.get('x-push-secret') !== s.push_secret) return new Response('Nej', { status: 401 });
-  webpush.setVapidDetails(s.vapid_subject || 'mailto:kooperativsystemet@gmail.com', s.vapid_public, s.vapid_private);
+  webpush.setVapidDetails(s.vapid_subject || 'mailto:omstallningsplatser@gmail.com', s.vapid_public, s.vapid_private);
 
   const { type, id } = await req.json();
   let to: string | null = null, title = 'Omställningsplatser', body = '', url = './';

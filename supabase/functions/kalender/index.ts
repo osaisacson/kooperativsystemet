@@ -4,7 +4,7 @@
 // Driftsätt med "Verify JWT" avstängt (kalenderappar skickar ingen inloggning).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const APP_URL = 'https://osaisacson.github.io/kooperativsystemet/';
+const APP_URL = 'https://osaisacson.github.io/omstallningsplatser/';
 const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
 const z = (d: string) => new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -18,7 +18,7 @@ function ics(posts: any[], feed = false) {
     if (!p.event_start) continue;
     const end = p.event_end || new Date(new Date(p.event_start).getTime() + 2 * 3600e3).toISOString();
     const url = `${APP_URL}#/post/${p.id}`;
-    lines.push('BEGIN:VEVENT', `UID:${p.id}@kooperativsystemet`,
+    lines.push('BEGIN:VEVENT', `UID:${p.id}@kooperativsystemet`,   // appens gamla namn – UID får inte ändras, då dubbleras evenemangen i kalendrar
       `SEQUENCE:${Math.floor(new Date(p.updated_at || p.created_at).getTime() / 1000) % 2147483647}`,
       `DTSTAMP:${z(new Date().toISOString())}`, `LAST-MODIFIED:${z(p.updated_at || p.created_at)}`,
       `DTSTART:${z(p.event_start)}`, `DTEND:${z(end)}`, `SUMMARY:${esc(title(p.caption))}`,

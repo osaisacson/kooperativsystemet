@@ -3,7 +3,9 @@
 import { materializeSeed } from '../seed.js';
 import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, geocode, eventColumns, sortCategories, resizeImage, blobToDataURL } from '../util.js';
 
-const KEY = 'kooperativsystemet-demo-v7';   // nyckeln behålls så att befintlig demodata finns kvar
+const KEY = 'omstallningsplatser-demo-v7';
+// Demodata sparad under appens gamla namn flyttas över.
+try { const old = localStorage.getItem('kooperativsystemet-demo-v7'); if (old && !localStorage.getItem(KEY)) { localStorage.setItem(KEY, old); localStorage.removeItem('kooperativsystemet-demo-v7'); } } catch { /* ok */ }
 const subs = new Set();
 const fresh = () => ({ ...materializeSeed(), credentials: {}, session: null, notifications: [], messages: [] });
 

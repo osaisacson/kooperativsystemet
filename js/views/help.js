@@ -97,7 +97,7 @@ export function Help() {
     <${Section} title="Radera ditt konto"><${DeleteAccount} /><//>
     <${Section} title="Kontakt">
       <p>Frågor? Mejla <a href=${'mailto:' + CONTACT_EMAIL}>${CONTACT_EMAIL}</a>.</p>
-      <p class="small muted">Omställningsplatser är öppen källkod: <a href="https://github.com/osaisacson/kooperativsystemet" target="_blank" rel="noopener noreferrer">github.com/osaisacson/kooperativsystemet</a></p>
+      <p class="small muted">Omställningsplatser är öppen källkod: <a href="https://github.com/osaisacson/omstallningsplatser" target="_blank" rel="noopener noreferrer">github.com/osaisacson/omstallningsplatser</a></p>
     <//>
   </div>`;
 }
