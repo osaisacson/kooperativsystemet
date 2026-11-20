@@ -52,7 +52,7 @@ export function AuthView() {
   const switchTo = (m) => { setMode(m); setErr(''); setInfo(''); };
   return html`<div class="auth">
     <img class="auth-logo" src="icon.svg" alt="" width="72" height="72" />
-    <h1 class="logo big">${APP_NAME}</h1>
+    <h1 class="logo big">SOS<small class="logo-sub">Småskaliga Omkonfigurationer av Samhället</small></h1>
     <form class="form card" onSubmit=${submit}>
       ${!reset && html`<${ProviderButtons} />`}
       ${reset && html`<p><strong>Glömt lösenordet?</strong><br /><span class="muted">Skriv din e-postadress så skickar vi en länk där du kan välja ett nytt.</span></p>`}
@@ -162,7 +162,7 @@ export function NewPassword() {
   }
   return html`<div class="auth">
     <img class="auth-logo" src="icon.svg" alt="" width="72" height="72" />
-    <h1 class="logo big">${APP_NAME}</h1>
+    <h1 class="logo big">SOS<small class="logo-sub">Småskaliga Omkonfigurationer av Samhället</small></h1>
     <form class="form card" onSubmit=${submit}>
       <p><strong>Välj ett nytt lösenord</strong></p>
       <label>Nytt lösenord<input required type="password" minlength="6" autocomplete="new-password" value=${pw} onInput=${(e) => setPw(e.target.value)} autofocus /></label>

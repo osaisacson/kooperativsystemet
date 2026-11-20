@@ -44,7 +44,7 @@ function BottomNav({ r }) {
   // På mobilen en meny längst ner; på surfplatta och dator en meny till vänster med text (se app.css).
   const item = (href, label, on, icon, n, cls = '') => html`<a href=${href} aria-label=${label} title=${label} class=${(on ? 'on ' : '') + cls}>${icon}<${Count} n=${n} /><span class="nav-label">${label}</span></a>`;
   return html`<nav class="bottomnav">
-    <a class="nav-logo desk" href="#/" aria-hidden="true" tabindex="-1"><img src="icon.svg" alt="" width="34" height="34" /><span class="nav-label">Kooperativsystemet</span></a>
+    <a class="nav-logo desk" href="#/" aria-hidden="true" tabindex="-1"><img src="icon.svg" alt="" width="34" height="34" /><span class="nav-label">SOS<small class="logo-sub">Småskaliga Omkonfigurationer av Samhället</small></span></a>
     ${item('#/', 'Hem', !a, html`<${Icon} name="home" size=${26} />`)}
     ${item('#/kalender', 'Kalender', a === 'kalender', html`<${Icon} name="calendar" size=${26} />`)}
     ${item('#/sok', 'Sök', a === 'sok', html`<${Icon} name="search" size=${26} />`)}

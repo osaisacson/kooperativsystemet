@@ -64,7 +64,8 @@ main { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px); 
 .topbar-side.right { justify-content: flex-end; }
 .topbar.brand { padding: 0 8px 0 16px; border-bottom: 0; }
 .logo { flex: 1; font-size: 24px; font-weight: 700; letter-spacing: -.02em; color: var(--accent); }
-.logo.big { font-size: 17px; text-align: center; margin-bottom: 8px; }
+.logo.big { font-size: 30px; line-height: 1.1; text-align: center; margin-bottom: 8px; letter-spacing: .02em; }
+.logo-sub { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; letter-spacing: .01em; color: var(--muted); opacity: .8; }
 .iconbtn { position: relative; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; }
 .iconbtn:hover { background: var(--bg-soft); }
 .icon { display: block; }
@@ -533,7 +534,9 @@ a.todo small { display: block; }
   .bottomnav a, .bottomnav .desk { width: auto; display: flex; align-items: center; justify-content: flex-start; gap: 14px; padding: 0 12px; }
   .bottomnav .nav-label { display: inline; font-size: 15px; color: var(--text); }
   .bottomnav a.on .nav-label { font-weight: 700; }
-  .bottomnav .nav-logo .nav-label { font-weight: 700; color: var(--accent); letter-spacing: -.01em; }
+  .bottomnav .nav-logo .nav-label { display: flex; flex-direction: column; font-weight: 700; font-size: 17px; line-height: 1.1; color: var(--accent); letter-spacing: .02em; }
+  .bottomnav .nav-logo .logo-sub { font-size: 10px; line-height: 1.25; margin-top: 2px; }
+  .bottomnav .nav-logo { height: auto; padding-block: 6px; }
   .bottomnav .count { top: 6px; left: 26px; right: auto; }
 
   /* Inlägg: bild till vänster, kommentarer till höger */
@@ -544,3 +547,9 @@ a.todo small { display: block; }
   .post-side { min-height: calc(100dvh - 52px); display: flex; flex-direction: column; }
   .post-side .comments-section { flex: 1; }
 }
+
+/* Grupp hämtad från en annan sida, som gruppen själv inte tagit över än */
+.imported-banner { margin: 10px 16px 0; padding: 9px 12px; border-radius: 10px; background: var(--bg-soft); border: 1px dashed var(--line);
+  font-size: 13px; line-height: 1.4; color: var(--muted); }
+.imported-banner a { color: var(--text); text-decoration: underline; }
+.imported-banner small { display: block; margin-top: 2px; font-size: 12px; }

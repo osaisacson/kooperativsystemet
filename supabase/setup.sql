@@ -20,6 +20,7 @@ create table public.groups (
   name text not null,
   description text not null default '',
   homepage text,
+  imported_from text,              -- t.ex. 'byggemenskaper.se': hämtad därifrån, visas med en banner tills gruppen fått en egen admin
   country text,                              -- land, region och stad: flödet kan visas per plats
   region text,
   city text,

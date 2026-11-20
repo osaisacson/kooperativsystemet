@@ -40,11 +40,17 @@ export function GroupView({ id }) {
   const list = posts.data || [];
   const cover = (h) => list.find((p) => p.id === h.post_ids[0] && p.slides[0])?.slides[0].image_url;
   const reload = () => { g.reload(); posts.reload(); };
+  // Hämtad från t.ex. byggemenskaper.se: bannern visas tills någon annan än den som hämtade gruppen blivit admin.
+  const imported = grp.imported_from && !grp.members.some((m) => m.role === 'admin' && m.user.id !== grp.created_by);
 
   async function join() { if (await attempt(() => api.joinGroup(id), `Välkommen till ${grp.name}!`)) { await refreshMe(); g.reload(); } }
 
   return html`<div class="page">
     <${Header} title=${grp.name} back right=${admin && html`<a class="iconbtn" href=${`#/grupp/${id}/installningar`} aria-label="Gruppinställningar"><${Icon} name="gear" /></a>`} />
+    ${imported && html`<div class="imported-banner">
+      Hämtad från <a href=${'https://' + grp.imported_from} target="_blank" rel="noopener noreferrer">${grp.imported_from}</a>, inte administrerad av gruppen (än).
+      <small>Är det er grupp? Gå med, så gör vi er till admins.</small>
+    </div>`}
     <div class="profile-head">
       <${Avatar} src=${grp.avatar_url} name=${grp.name} size=${84} />
       <div class="stats">
