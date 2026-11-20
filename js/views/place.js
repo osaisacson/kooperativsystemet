@@ -4,7 +4,7 @@ import { html, useState, useEffect, useRef } from '../lib.js';
 import { api } from '../api/index.js';
 import { useStore, setPlace } from '../store.js';
 import { Sheet } from '../ui.js';
-import { LEVELS, SE_REGIONS, placeLabel, zoomOut, zoomIn, pcKey, fmtPostcode, lookupPostcode, countryNames } from '../util.js';
+import { LEVELS, SE_REGIONS, placeLabel, zoomOut, zoomIn, pcKey, fmtPostcode, lookupPostcode, findDistrict, countryNames } from '../util.js';
 
 const lc = (x) => (x || '').toLowerCase();
 const LEVEL_TITLE = { country: 'land', region: 'region', city: 'stad', district: 'stadsdel' };
@@ -99,6 +99,7 @@ function PlacePicker({ level: startLevel, place, groups, extras = [], onClose })
   const [level, setLevel] = useState(startLevel);
   const [q, setQ] = useState('');
   const [found, setFound] = useState(null);   // stadsdel som slagits upp från ett postnummer
+  const [named, setNamed] = useState(null);   // stadsdel som slagits upp från ett namn, t.ex. "Sanna"
   const opts = placeOptions(groups, extras)[level];
   const parentKey = { country: null, region: 'country', city: 'region', district: 'city' }[level];
   const near = (o) => (parentKey && place[parentKey] && lc(o[parentKey]) === lc(place[parentKey]) ? 0 : 1);
@@ -120,6 +121,26 @@ function PlacePicker({ level: startLevel, place, groups, extras = [], onClose })
     lookupPostcode(digits, '').then((h) => alive && setFound(h || false));
     return () => { alive = false; };
   }, [level, digits]);
+
+  // Ett stadsdelsnamn som inte finns i listan slås upp (t.ex. "Sanna" i Göteborg), så att man kan välja
+  // en stadsdel där det inte finns några grupper än och ändå se evenemang och annat som hör dit.
+  const nameQ = level === 'district' && !digits && q.trim().length >= 3 && !list.some((o) => lc(label(o)) === needle) ? q.trim() : '';
+  useEffect(() => {
+    setNamed(null);
+    if (!nameQ) return;
+    let alive = true;
+    const t = setTimeout(() => findDistrict(nameQ, place.city || '', place.country || 'Sverige').then((h) => alive && setNamed(h || false)), 500);
+    return () => { alive = false; clearTimeout(t); };
+  }, [nameQ, place.city]);
+  function pickNamed() {
+    const name = named?.district || nameQ.replace(/^./, (m) => m.toUpperCase());
+    // Alla kända postnummer i staden med samma stadsdelsnamn räknas in, plus det som slogs upp.
+    const same = opts.filter((o) => lc(label(o)) === lc(name) && (!place.city || lc(o.city) === lc(place.city))).map((o) => fmtPostcode(o.postcode));
+    const postcodes = [...new Set([named?.postcode, ...same].filter(Boolean))];
+    setPlace({ level: 'district', country: place.country || named?.country || null, region: place.region || named?.region || null,
+      city: place.city || named?.city || null, district: name, postcode: postcodes[0] || null, postcodes });
+    onClose();
+  }
 
   // Att välja en plats på en nivå tömmer nivåerna inuti (de hör till den gamla platsen).
   function pick(o, extra = {}) {
@@ -163,12 +184,15 @@ function PlacePicker({ level: startLevel, place, groups, extras = [], onClose })
       <span class="place-opt-main">${found ? found.district || `Postnummer ${fmtPostcode(digits)}` : 'Hittar inte det postnumret'}<small class="muted">${found ? [fmtPostcode(digits), found.city].filter(Boolean).join(' · ') : ''}</small></span></button>`}
     ${parentName && html`<div class="sheet-label">I ${parentName}</div>`}
     ${nearList.map((o) => row(o, !parentName))}
-    ${parentName && !nearList.length && html`<p class="empty small">${needle ? 'Inget som matchar här.' : `Inget i ${parentName} har angett det än. Skriv för att välja ändå.`}</p>`}
+    ${parentName && !nearList.length && !nameQ && html`<p class="empty small">${needle ? 'Inget som matchar här.' : `Inget i ${parentName} har angett det än. Skriv för att välja ändå.`}</p>`}
     ${farList.length > 0 && html`<div class="sheet-label">${OTHER[level]}</div>`}
     ${farList.map((o) => row(o, true))}
+    ${nameQ && html`<button class="sheet-item place-opt" onClick=${pickNamed} disabled=${named === null}>
+      <span class="place-opt-main">${named ? named.district : `Visa ”${nameQ}”`}<small class="muted">${named === null ? 'Letar…'
+        : named ? [named.postcode, named.city || place.city].filter(Boolean).join(' · ') : `Hittar ingen stadsdel som heter så${place.city ? ` i ${place.city}` : ''} – visa ändå`}</small></span></button>`}
     ${free && html`<button class="sheet-item place-opt" onClick=${() => pick({ [level]: q.trim().replace(/^./, (m) => m.toUpperCase()) })}>
       <span class="place-opt-main">Visa ”${q.trim()}”<small class="muted">Inget där än – det som dyker upp visas här</small></span></button>`}
-    ${!parentName && !list.length && !free && !(level === 'district' && digits.length === 5) && html`<p class="empty small">${needle ? 'Inget som matchar.' : 'Inget har angett det än. Skriv för att välja ändå.'}</p>`}
+    ${!parentName && !list.length && !free && !nameQ && !(level === 'district' && digits.length === 5) && html`<p class="empty small">${needle ? 'Inget som matchar.' : 'Inget har angett det än. Skriv för att välja ändå.'}</p>`}
   <//>`;
 }
 

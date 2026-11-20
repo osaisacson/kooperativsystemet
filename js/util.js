@@ -27,7 +27,8 @@ export function inPlace(group, place) {
   if (place.level === 'country') return same('country');
   if (place.level === 'region') return same('country') && same('region');
   if (place.level === 'city') return same('country') && same('city');
-  return same('country') && !!pcKey(group.postcode) && pcKey(group.postcode) === pcKey(place.postcode);
+  const keys = place.postcodes?.length ? place.postcodes.map(pcKey) : [pcKey(place.postcode)];
+  return same('country') && !!pcKey(group.postcode) && keys.includes(pcKey(group.postcode));
 }
 // Var ett inlägg hör hemma: ett evenemang med egen plats räknas dit, annars gruppens plats.
 export function postPlace(p) {
@@ -60,23 +61,62 @@ export function placeFromHome(h) {
 export const SE_REGIONS = ['Blekinge län', 'Dalarnas län', 'Gotlands län', 'Gävleborgs län', 'Hallands län', 'Jämtlands län', 'Jönköpings län',
   'Kalmar län', 'Kronobergs län', 'Norrbottens län', 'Skåne län', 'Stockholms län', 'Södermanlands län', 'Uppsala län', 'Värmlands län',
   'Västerbottens län', 'Västernorrlands län', 'Västmanlands län', 'Västra Götalands län', 'Örebro län', 'Östergötlands län'];
-// Namnet på stadsdelen för ett postnummer, från OpenStreetMap (Photon). Sparas i webbläsaren.
+// Namnet på stadsdelen för ett postnummer, från OpenStreetMap: först Photon, annars Nominatim
+// (postnumrets mittpunkt → stadsdel eller by där). Sparas i webbläsaren.
 const pcCache = (() => { try { return JSON.parse(localStorage.getItem('pc-names')) || {}; } catch { return {}; } })();
+// Nominatim tillåter högst ett anrop per sekund – anropen ställs i kö.
+let nomQueue = Promise.resolve();
+const nominatim = (path) => {
+  const job = nomQueue.then(() => fetch(`https://nominatim.openstreetmap.org/${path}&format=jsonv2&addressdetails=1&accept-language=sv`).then((r) => r.json()));
+  nomQueue = job.catch(() => {}).then(() => new Promise((res) => setTimeout(res, 1100)));
+  return job;
+};
+const areaName = (a = {}) => a.suburb || a.quarter || a.neighbourhood || a.city_district || a.village || a.hamlet || a.town || null;
+const NO_DISTRICT = { district: null };   // postnumret finns inte alls
 export async function lookupPostcode(postcode, city = '') {
   const d = String(postcode || '').replace(/\D/g, '');
   if (d.length < 5) return null;
   const key = `${d}|${city}`;
-  if (key in pcCache) return pcCache[key];
+  if (pcCache[key]?.district || pcCache[key]?.v === 2) return pcCache[key];   // äldre tomma svar slås upp igen
   let hit = null;
+  let failed = false;
   try {
     const r = await fetch(`https://photon.komoot.io/api/?limit=5&lang=default&q=${encodeURIComponent(fmtPostcode(d) + ' ' + city)}`).then((r) => r.json());
     const f = (r.features || []).find((x) => x.properties.osm_value === 'postcode' && x.properties.name?.replace(/\D/g, '') === d)
       || (r.features || []).find((x) => x.properties.postcode?.replace(/\D/g, '') === d);
     if (f) { const p = f.properties; hit = { district: p.district || p.locality || null, city: p.city || p.town || null, region: p.county || p.state || null, country: p.country || null }; }
-  } catch { return null; }   // nätverksfel sparas inte
-  pcCache[key] = hit;
+  } catch { failed = true; }
+  if (!hit?.district) {
+    try {
+      const [pc] = await nominatim(`search?postalcode=${d}&country=se&limit=1`);
+      if (pc) {
+        const rev = await nominatim(`reverse?lat=${pc.lat}&lon=${pc.lon}&zoom=14`);
+        const a = rev?.address || {};
+        hit = { district: areaName(a), city: hit?.city || a.city || a.town || (a.municipality || '').replace(/ kommun$/, '') || null,
+          region: hit?.region || pc.address?.county || a.county || null, country: hit?.country || a.country || null };
+      } else if (!failed) hit = hit || NO_DISTRICT;
+      failed = false;
+    } catch { if (failed) return null; }   // nätverksfel sparas inte
+  }
+  pcCache[key] = hit && { ...hit, v: 2 };
   try { localStorage.setItem('pc-names', JSON.stringify(pcCache)); } catch { /* ok */ }
   return hit;
+}
+
+// En stadsdel som man skriver namnet på, t.ex. "Sanna" i Göteborg: slås upp hos Nominatim, som ger stadsdelens postnummer.
+const districtCache = {};
+export async function findDistrict(name, city, country = 'Sverige') {
+  const key = `${name}|${city}`.toLowerCase();
+  if (key in districtCache) return districtCache[key];
+  try {
+    const list = await nominatim(`search?q=${encodeURIComponent([name, city, country].filter(Boolean).join(', '))}&limit=3`);
+    const f = list.find((x) => ['suburb', 'quarter', 'neighbourhood', 'city_district', 'village', 'hamlet', 'town'].includes(x.addresstype)) || list[0];
+    if (!f) return (districtCache[key] = null);
+    let pc = f.address?.postcode;
+    if (!pc) pc = (await nominatim(`reverse?lat=${f.lat}&lon=${f.lon}&zoom=18`))?.address?.postcode;
+    return (districtCache[key] = { district: f.name || name, postcode: pc ? fmtPostcode(pc) : null,
+      city: f.address?.city || f.address?.town || city, region: f.address?.county || null, country: f.address?.country || country });
+  } catch { return null; }
 }
 export const countryNames = () => {
   try {
