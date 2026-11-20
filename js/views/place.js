@@ -3,7 +3,7 @@
 import { html, useState, useEffect, useRef } from '../lib.js';
 import { useStore, setPlace } from '../store.js';
 import { Sheet } from '../ui.js';
-import { LEVELS, SE_REGIONS, placeLabel, zoomOut, zoomIn, pc3, fmtPostcode, lookupPostcode, countryNames } from '../util.js';
+import { LEVELS, SE_REGIONS, placeLabel, zoomOut, zoomIn, pcKey, fmtPostcode, lookupPostcode, countryNames } from '../util.js';
 
 const lc = (x) => (x || '').toLowerCase();
 const LEVEL_TITLE = { country: 'land', region: 'region', city: 'stad', district: 'stadsdel' };
@@ -12,8 +12,7 @@ const LEVEL_TITLE = { country: 'land', region: 'region', city: 'stad', district:
 export function placeOptions(groups) {
   const maps = { country: new Map(), region: new Map(), city: new Map(), district: new Map() };
   const add = (level, key, o) => {
-    const m = maps[level]; const x = m.get(key) || { ...o, level, n: 0, pcs: [] }; x.n++;
-    if (level === 'district' && !x.pcs.includes(fmtPostcode(o.postcode))) x.pcs.push(fmtPostcode(o.postcode));
+    const m = maps[level]; const x = m.get(key) || { ...o, level, n: 0 }; x.n++;
     m.set(key, x);
   };
   for (const g of groups) {
@@ -21,43 +20,29 @@ export function placeOptions(groups) {
     if (g.country) add('country', c, { country: g.country });
     if (g.region) add('region', `${c}|${lc(g.region)}`, { region: g.region, country: g.country });
     if (g.city) add('city', `${c}|${lc(g.city)}`, { city: g.city, region: g.region, country: g.country });
-    if (pc3(g.postcode)) add('district', `${c}|${pc3(g.postcode)}`, { postcode: g.postcode, city: g.city, region: g.region, country: g.country });
+    if (pcKey(g.postcode)) add('district', `${c}|${pcKey(g.postcode)}`, { postcode: fmtPostcode(g.postcode), city: g.city, region: g.region, country: g.country });
   }
-  const name = (o) => (o.level === 'district' ? pc3(o.postcode) : o[o.level]);
+  const name = (o) => (o.level === 'district' ? o.postcode : o[o.level]);
   const sort = (m) => [...m.values()].sort((a, b) => b.n - a.n || name(a).localeCompare(name(b), 'sv'));
   return { country: sort(maps.country), region: sort(maps.region), city: sort(maps.city), district: sort(maps.district) };
 }
 
-// En stadsdel är alla postnummer med samma tre första siffror. Namnen hämtas i bakgrunden från
-// upp till tre postnummer i varje (t.ex. ”Kungsladugård, Sanna”), så att man känner igen området.
+// Namnen på stadsdelarna hämtas i bakgrunden, ett postnummer i taget. Hittas inget visas bara numret.
 function useDistrictNames(list) {
   const [names, setNames] = useState({});
-  const key = list.map((o) => pc3(o.postcode)).join(',');
+  const key = list.map((o) => pcKey(o.postcode)).join(',');
   useEffect(() => {
     let alive = true;
     (async () => {
-      for (const o of list.slice(0, 20)) {
-        const found = [];
-        for (const pc of (o.pcs || [o.postcode]).slice(0, 3)) {
-          const hit = await lookupPostcode(pc, o.city || '');
-          if (!alive) return;
-          if (hit?.district && !found.includes(hit.district)) found.push(hit.district);
-        }
-        if (found.length) setNames((n) => ({ ...n, [pc3(o.postcode)]: found.join(', ') }));
+      for (const o of list.slice(0, 30)) {
+        const hit = await lookupPostcode(o.postcode, o.city || '');
+        if (!alive) return;
+        if (hit?.district) setNames((n) => ({ ...n, [pcKey(o.postcode)]: hit.district }));
       }
     })();
     return () => { alive = false; };
   }, [key]);
   return names;
-}
-
-// Rad under platsnamnet: vilken nivå det är och vad den ligger i.
-function placeContext(p) {
-  if (!p || p.level === 'world') return 'Alla platser';
-  if (p.level === 'country') return 'Land';
-  if (p.level === 'region') return p.country ? `Region i ${p.country}` : 'Region';
-  if (p.level === 'city') return `Stad${p.region || p.country ? ' i ' + (p.region || p.country) : ''}`;
-  return `Stadsdel i ${p.city || p.country || ''} · ${pc3(p.postcode)}`;
 }
 
 // Väljaren överst: ‹ Göteborg ›. Vänsterpilen zoomar ut (stad → region → land → hela världen), högerpilen
@@ -75,7 +60,6 @@ export function PlaceSwitcher({ groups }) {
       <button class="place-btn" onClick=${() => setPicking(place.level === 'world' ? 'country' : place.level)}
         aria-label=${`Visar ${placeLabel(place)}. Tryck för att byta`}>
         <span class="place-name">${placeLabel(place)}</span>
-        <span class="place-ctx">${placeContext(place)}</span>
       </button>
       <button class="zoom" disabled=${!nextLevel} onClick=${() => (inner ? setPlace(inner) : setPicking(nextLevel))}
         aria-label=${inner ? `Zooma in till ${placeLabel(inner)}` : nextLevel ? `Välj ${LEVEL_TITLE[nextLevel]}` : 'Zooma in'}
@@ -92,13 +76,13 @@ function PlacePicker({ level, place, groups, onClose }) {
   const parentKey = { country: null, region: 'country', city: 'region', district: 'city' }[level];
   const near = (o) => (parentKey && place[parentKey] && lc(o[parentKey]) === lc(place[parentKey]) ? 0 : 1);
   const names = useDistrictNames(level === 'district' ? opts.filter((o) => !near(o)).concat(opts.filter(near)).slice(0, 30) : []);
-  const label = (o) => (o.level === 'district' ? names[pc3(o.postcode)] || `Postnummer ${pc3(o.postcode)}` : o[o.level]);
-  const sub = (o) => (o.level === 'district' ? [`${pc3(o.postcode)} xx`, o.city] : [o.level === 'city' && o.region, o.level !== 'country' && o.country]).filter(Boolean).join(' · ');
+  const label = (o) => (o.level === 'district' ? names[pcKey(o.postcode)] || fmtPostcode(o.postcode) : o[o.level]);
+  const sub = (o) => (o.level === 'district' ? [names[pcKey(o.postcode)] && fmtPostcode(o.postcode), o.city] : [o.level === 'city' && o.region, o.level !== 'country' && o.country]).filter(Boolean).join(' · ');
   const needle = lc(q.trim());
-  const rank = (o) => { const n = lc(label(o)); return n.startsWith(needle) || (o.level === 'district' && pc3(o.postcode).startsWith(needle.replace(/\D/g, '') || 'x')) ? 0 : n.includes(needle) ? 1 : lc(sub(o)).includes(needle) ? 2 : 3; };
+  const rank = (o) => { const n = lc(label(o)); return n.startsWith(needle) || (o.level === 'district' && pcKey(o.postcode).startsWith(needle.replace(/\D/g, '') || 'x')) ? 0 : n.includes(needle) ? 1 : lc(sub(o)).includes(needle) ? 2 : 3; };
   const list = opts.map((o) => [needle ? rank(o) : 0, near(o), o]).filter(([r]) => r < 3)
     .sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, , o]) => o);
-  const isOn = (o) => place.level === level && (level === 'district' ? pc3(o.postcode) === pc3(place.postcode) : lc(o[level]) === lc(place[level]))
+  const isOn = (o) => place.level === level && (level === 'district' ? pcKey(o.postcode) === pcKey(place.postcode) : lc(o[level]) === lc(place[level]))
     && lc(o.country) === lc(place.country);
   // Ett postnummer som inte finns i listan slås upp, så att man kan välja vilken stadsdel som helst.
   const digits = q.replace(/\D/g, '');
@@ -115,7 +99,7 @@ function PlacePicker({ level, place, groups, onClose }) {
     const keep = { country: [], region: ['country'], city: ['country', 'region'], district: ['country', 'region', 'city'] }[level];
     const base = { level };
     for (const k of keep) base[k] = (k in o ? o[k] : place[k]) ?? null;
-    if (level === 'district') Object.assign(base, { postcode: o.postcode, district: names[pc3(o.postcode)] || o.district || null });
+    if (level === 'district') Object.assign(base, { postcode: o.postcode, district: names[pcKey(o.postcode)] || o.district || null });
     else base[level] = o[level];
     setPlace({ ...base, ...extra });
     onClose();

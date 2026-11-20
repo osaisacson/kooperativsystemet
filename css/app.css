@@ -582,7 +582,6 @@ a.todo small { display: block; }
 .placebar .zoom:not(:disabled):active { background: var(--accent-soft); }
 .placebar .place-btn { flex: 0 1 auto; align-items: center; text-align: center; padding: 2px 2px; min-width: 0; }
 .placebar .place-name { justify-content: center; }
-.place-ctx { font-size: 11px; color: var(--muted); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pick-head { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: 12px 0 8px; }
 .pick-title { font-size: 15px; font-weight: 700; text-align: center; }
 .home-place .typeahead { margin-top: 4px; }

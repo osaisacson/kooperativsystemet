@@ -7,17 +7,17 @@ export const DEFAULT_FUNCTIONS = ['Verkstad', 'Kök', 'Möteslokal', 'Förråd',
 export const SPACE_COSTS = { gratis: 'Gratis', gentjanst: 'Mot gentjänst', kostar: 'Kostar' };
 
 // Plats: flödet kan visas för en stadsdel, en stad, en region, ett land eller hela världen.
-// En stadsdel anges med postnummer; grupper räknas till samma stadsdel om postnumrets tre första siffror är lika.
+// En stadsdel anges med postnummer (hela, fem siffror i Sverige).
 export const LEVELS = ['world', 'country', 'region', 'city', 'district'];
 export const PLACE_LEVELS = { district: 'stadsdel', city: 'stad', region: 'region', country: 'land', world: '' };
 const LEVEL_KEY = { country: 'country', region: 'region', city: 'city', district: 'postcode' };
-export const pc3 = (p) => String(p || '').replace(/\D/g, '').slice(0, 3);
+export const pcKey = (p) => String(p || '').replace(/\D/g, '');
 export const fmtPostcode = (p) => { const d = String(p || '').replace(/\D/g, ''); return d.length === 5 ? `${d.slice(0, 3)} ${d.slice(3)}` : String(p || '').trim(); };
 // Har platsen ett värde på den här nivån? (Hela världen har alltid det.)
 export const hasLevel = (place, level) => level === 'world' || !!(place && place[LEVEL_KEY[level]]);
 export function placeLabel(place) {
   if (!place || place.level === 'world') return 'Hela världen';
-  if (place.level === 'district') return place.district || (place.postcode ? `Postnummer ${pc3(place.postcode)}` : 'Stadsdel');
+  if (place.level === 'district') return place.district || (place.postcode ? fmtPostcode(place.postcode) : 'Stadsdel');
   return place[place.level] || 'Hela världen';
 }
 export function inPlace(group, place) {
@@ -27,7 +27,7 @@ export function inPlace(group, place) {
   if (place.level === 'country') return same('country');
   if (place.level === 'region') return same('country') && same('region');
   if (place.level === 'city') return same('country') && same('city');
-  return same('country') && !!pc3(group.postcode) && pc3(group.postcode) === pc3(place.postcode);
+  return same('country') && !!pcKey(group.postcode) && pcKey(group.postcode) === pcKey(place.postcode);
 }
 // Ett steg utåt (stadsdel → stad → region → land → hela världen). Nivåer som saknas hoppas över.
 // De inre fälten sparas, så att man kan zooma in igen till samma ställe.
