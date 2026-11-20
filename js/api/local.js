@@ -91,7 +91,9 @@ async function buildSlides(slides) {
 const place = ({ country, region, city }) => ({ country: (country || '').trim() || null, region: (region || '').trim() || null, city: (city || '').trim() || null });
 // Plats + adress + kartposition (slås upp automatiskt).
 async function located({ country, region, city, address, postcode, lat, lng }) {
-  const p = { ...place({ country, region, city }), address: (address || '').trim() || null, postcode: (postcode || '').trim() || null };
+  const p = { ...place({ country, region, city }), address: (address || '').trim() || null,
+    // Postnumret (för stadsdelen) tas ur adressen om det inte valts ur adresslistan.
+    postcode: (postcode || '').trim() || (String(address || '').match(/\b\d{3} ?\d{2}\b/) || [null])[0]?.replace(/^(\d{3})(\d{2})$/, '$1 $2') || null };
   const pos = lat != null && lng != null ? { lat, lng } : await geocode(p);   // vald adress har redan en position
   return { ...p, lat: pos?.lat ?? null, lng: pos?.lng ?? null };
 }

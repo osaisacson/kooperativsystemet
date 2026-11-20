@@ -63,7 +63,9 @@ const place = ({ country, region, city }) => ({ country: (country || '').trim() 
 const cleanHome = (h) => ({ country: (h.country || '').trim() || null, region: (h.region || '').trim() || null, city: (h.city || '').trim() || null,
   postcode: (h.postcode || '').trim() || null, district: h.district || null, level: ['country', 'region', 'city', 'district'].includes(h.level) ? h.level : 'city' });
 async function located({ country, region, city, address, postcode, lat, lng }) {
-  const p = { ...place({ country, region, city }), address: (address || '').trim() || null, postcode: (postcode || '').trim() || null };
+  const p = { ...place({ country, region, city }), address: (address || '').trim() || null,
+    // Postnumret (för stadsdelen) tas ur adressen om det inte valts ur adresslistan.
+    postcode: (postcode || '').trim() || (String(address || '').match(/\b\d{3} ?\d{2}\b/) || [null])[0]?.replace(/^(\d{3})(\d{2})$/, '$1 $2') || null };
   const pos = lat != null && lng != null ? { lat, lng } : await geocode(p);   // vald adress har redan en position
   return { ...p, lat: pos?.lat ?? null, lng: pos?.lng ?? null };
 }
