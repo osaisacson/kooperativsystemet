@@ -32,7 +32,7 @@ function EditorChecklist() {
   if (t.loading && !t.data) return html`<${Loading} />`;
   return html`<section class="todo-sec">
     <h2 class="todo-title">Redaktionens checklista</h2>
-    <p class="muted small pad-x">Anmälningar från användarna. Öppna det som anmälts, ta bort det om det bryter mot villkoren (via ··· eller längst ner på sidan) och bocka av.</p>
+    <ol class="steps-list"><li>Öppna det som anmälts.</li><li>Ta bort det om det bryter mot villkoren (via ··· eller längst ner på sidan).</li><li>Bocka av det här.</li></ol>
     ${open.length ? html`<div class="list">${open.map(item)}</div>` : html`<p class="muted small pad-x">Inga anmälningar att gå igenom.</p>`}
     ${done.length > 0 && html`<button class="link small pad-x" onClick=${() => setShowDone((x) => !x)}>${showDone ? 'Dölj' : 'Visa'} avbockade (${done.length})</button>
       ${showDone && html`<div class="list">${done.map(item)}</div>`}`}

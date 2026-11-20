@@ -192,7 +192,6 @@ const plusDays = (d) => new Date(Date.now() + d * 864e5).toISOString().slice(0, 
 // Typerna man väljer mellan när man lägger upp något. Evenemang sparas som ett vanligt inlägg med datum, tid och plats.
 const FORM_TYPES = { vanlig: 'Vanlig post', evenemang: 'Evenemang', finansiering: 'Tillgänglig finansiering', lokal: 'Lokal att låna eller hyra' };
 const TYPE_HELP = {
-  vanlig: 'Syns i flödet, i gruppen och på din profil.',
   evenemang: 'Något som händer en viss dag: får tid och plats, syns under Events och folk kan anmäla sig.',
   finansiering: 'Pengar som andra grupper kan söka. Syns under Finansiering.',
   lokal: 'En lokal andra kan låna, använda mot en gentjänst eller hyra. Syns under Lokaler.',
@@ -215,25 +214,37 @@ function FinanceSteps() {
   </div>`;
 }
 
-// Chips att välja bland, plus ett fält för att lägga till nya.
+// Chips att välja bland. Plus-chippen först öppnar ett litet fält: börja skriva för att välja ett befintligt eller lägga till ett nytt.
 function ChipPicker({ options, selected, onChange, placeholder }) {
   const [extra, setExtra] = useState([]);
+  const [adding, setAdding] = useState(false);
   const [text, setText] = useState('');
   const all = [...new Set([...options, ...extra, ...selected])];
   const toggle = (c) => onChange(selected.includes(c) ? selected.filter((x) => x !== c) : [...selected, c]);
-  function add() {
-    const c = text.trim().replace(/^./, (m) => m.toUpperCase());
-    setText('');
+  const q = text.trim().toLowerCase();
+  const hits = q ? all.filter((x) => x.toLowerCase().includes(q) && !selected.includes(x)).slice(0, 6) : [];
+  const exact = all.find((x) => x.toLowerCase() === q);
+  function add(value = text) {
+    const c = value.trim().replace(/^./, (m) => m.toUpperCase());
+    setText(''); setAdding(false);
     if (!c) return;
     const existing = all.find((x) => x.toLowerCase() === c.toLowerCase()) || c;
     if (!all.includes(existing)) setExtra((xs) => [...xs, existing]);
     if (!selected.includes(existing)) onChange([...selected, existing]);
   }
-  return html`<div>
-    <div class="chips wrap">${all.map((c) => html`<button type="button" class=${'chip' + (selected.includes(c) ? ' on' : '')} onClick=${() => toggle(c)}>${c}</button>`)}</div>
-    <div class="inline"><input value=${text} onInput=${(e) => setText(e.target.value)} placeholder=${placeholder}
-      onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} />
-      <button type="button" class="btn small" onClick=${add} disabled=${!text.trim()}>Lägg till</button></div>
+  return html`<div class="chip-picker">
+    <div class="chips wrap">
+      ${adding
+        ? html`<span class="chip-input"><input autofocus value=${text} onInput=${(e) => setText(e.target.value)} placeholder=${placeholder}
+            onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } if (e.key === 'Escape') { setAdding(false); setText(''); } }}
+            onBlur=${() => setTimeout(() => { if (!text.trim()) setAdding(false); }, 150)} />
+            ${q && html`<span class="chip-hits">
+              ${hits.map((h) => html`<button type="button" onMouseDown=${(e) => e.preventDefault()} onClick=${() => add(h)}>${h}</button>`)}
+              ${!exact && html`<button type="button" class="new" onMouseDown=${(e) => e.preventDefault()} onClick=${() => add()}>+ Lägg till ”${text.trim()}”</button>`}
+            </span>`}</span>`
+        : html`<button type="button" class="chip chip-plus" aria-label="Lägg till" title="Lägg till" onClick=${() => setAdding(true)}>+</button>`}
+      ${all.map((c) => html`<button type="button" class=${'chip' + (selected.includes(c) ? ' on' : '')} onClick=${() => toggle(c)}>${c}</button>`)}
+    </div>
   </div>`;
 }
 
@@ -326,7 +337,7 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
         <legend class="label">Typ av post</legend>
         ${Object.entries(FORM_TYPES).map(([k, label]) => html`<label class=${'radio type' + (type === k ? ' on' : '')} key=${k}>
           <input type="radio" name="type" value=${k} checked=${type === k} onChange=${() => setType(k)} />
-          <span><strong>${label}</strong><small>${TYPE_HELP[k]}</small></span></label>`)}
+          <span><strong>${label}</strong>${TYPE_HELP[k] && html`<small>${TYPE_HELP[k]}</small>`}</span></label>`)}
       </fieldset>`}
 
       ${type === 'finansiering' && html`<section class="field fin-form">
@@ -342,7 +353,7 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
 
       ${type === 'lokal' && html`<section class="field">
         <div class="label">Vad kan lokalen användas till?</div>
-        <${ChipPicker} options=${spaceOptions.data || DEFAULT_FUNCTIONS} selected=${functions} onChange=${setFunctions} placeholder="Något annat…" />
+        <${ChipPicker} options=${spaceOptions.data || DEFAULT_FUNCTIONS} selected=${functions} onChange=${setFunctions} placeholder="Skriv en användning…" />
         <div class="label">Vad kostar det?</div>
         ${Object.entries(SPACE_COSTS).map(([k, label]) => html`<label class="radio" key=${k}>
           <input type="radio" name="cost" checked=${cost === k} onChange=${() => setCost(k)} /><span>${label}</span></label>`)}
@@ -395,9 +406,8 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
           placeholder=${{ finansiering: 'Vad kan pengarna sökas för? Vem kan söka?', lokal: 'Var ligger lokalen, när går den att använda och hur bokar man?' }[type] || 'Berätta vad ni gjort, vad ni lärt er eller vad ni behöver…'}></textarea></label>
 
       ${(type === 'vanlig' || type === 'evenemang') && html`<section class="field">
-        <div class="label">Kan andra lära sig något av det här?</div>
-        <small class="muted">Lägg till ämnen så att andra som jobbar med samma sak hittar inlägget.</small>
-        <${ChipPicker} options=${tagOptions.data || []} selected=${tags} onChange=${setTags} placeholder="Nytt ämne, t.ex. Solel…" />
+        <div class="label">Vad relaterar det till? <small class="muted">(valfritt)</small></div>
+        <${ChipPicker} options=${tagOptions.data || []} selected=${tags} onChange=${setTags} placeholder="Skriv ett ämne…" />
       </section>`}
 
       ${err && html`<p class="error">${err}</p>`}

@@ -28,7 +28,6 @@ export function AuthView() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [nickname, setNickname] = useState('');
   const [file, setFile] = useState(null);
   const [home, setHome] = useState(emptyHome);
   const [agree, setAgree] = useState(false);
@@ -47,7 +46,7 @@ export function AuthView() {
         if (!agree) { setErr('Bekräfta att du är minst 13 år och godkänner villkoren.'); return; }
         const bad = checkHome(home);
         if (bad) { setErr(bad); return; }
-        const r = await api.signUp({ email, password, name, nickname, avatarFile: file, home });
+        const r = await api.signUp({ email, password, name, avatarFile: file, home });
         if (r.needsConfirmation) { setInfo('Nästan klart! Vi har skickat ett mejl – klicka på länken i det och logga sedan in här.'); setMode('login'); }
         else go('/valkommen');
       }
@@ -65,8 +64,7 @@ export function AuthView() {
       ${!reset && html`<${ProviderButtons} />`}
       ${reset && html`<p><strong>Glömt lösenordet?</strong><br /><span class="muted">Skriv din e-postadress så skickar vi en länk där du kan välja ett nytt.</span></p>`}
       ${signup && html`<${ImagePicker} name=${name} onFile=${setFile} label="Välj profilbild" />
-        <label>Namn<input required autocomplete="name" value=${name} onInput=${(e) => setName(e.target.value)} placeholder="För- och efternamn" /></label>
-        <label>Smeknamn <small>(valfritt)</small><input autocomplete="nickname" value=${nickname} onInput=${(e) => setNickname(e.target.value)} /></label>`}
+        <label>Namn<input required autocomplete="name" value=${name} onInput=${(e) => setName(e.target.value)} placeholder="För- och efternamn" /></label>`}
       <label>E-post<input required type="email" autocomplete="email" value=${email} onInput=${(e) => setEmail(e.target.value)} /></label>
       ${!reset && html`<label>Lösenord<input required type="password" minlength="6" autocomplete=${signup ? 'new-password' : 'current-password'} value=${password} onInput=${(e) => setPassword(e.target.value)} /></label>`}
       ${signup && html`<${HomePlaceFields} value=${home} onChange=${setHome} groups=${places.data} />
@@ -147,12 +145,12 @@ export function Profile({ id }) {
         <div><b>${user.groups.length}</b><span>grupper</span></div>
       </div>
     </div>
-    <div class="profile-info"><strong>${user.name}</strong>${user.nickname && html` <span class="muted">"${user.nickname}"</span>`}
+    <div class="profile-info"><strong>${user.name}</strong>
       ${user.is_editor && html`<a class="role-badge" href="#/hjalp" title="Redaktionen representerar gruppen Omställningsplatser">Redaktionen</a>`}</div>
     ${(isMe || user.groups.length > 0) && html`<${GroupIcons} groups=${user.groups} canAdd=${isMe} />`}
     <div class="profile-actions">
       ${isMe
-        ? html`<a class="btn" href="#/redigera-profil">Redigera profil</a><button class="btn" onClick=${logout}>Logga ut</button>`
+        ? html`<a class="btn" href="#/redigera-profil">Profil och inställningar</a><button class="btn" onClick=${logout}>Logga ut</button>`
         : html`<a class="btn primary" href=${'#/meddelanden/' + id}>Skicka meddelande</a>`}
     </div>
     ${isMe && html`<${PushSetting} />`}
@@ -162,8 +160,8 @@ export function Profile({ id }) {
     <div class="page-foot">
       ${!isMe && html`<button class="link muted" onClick=${() => setReporting(true)}>Anmäl användaren</button>`}
       ${s.me.is_editor && html`<span class="editor-tools">
-        ${user.is_editor
-          ? html`<button class="link" onClick=${() => confirm(isMe ? 'Lämna Redaktionen?' : `Ta bort ${user.name} ur Redaktionen?`) && editorAct(() => api.setEditor(id, false), isMe ? 'Du har lämnat Redaktionen' : `${user.name} är inte längre med i Redaktionen`)}>${isMe ? 'Lämna Redaktionen' : 'Ta bort ur Redaktionen'}</button>`
+        ${isMe ? '' : user.is_editor
+          ? html`<button class="link" onClick=${() => confirm(`Ta bort ${user.name} ur Redaktionen?`) && editorAct(() => api.setEditor(id, false), `${user.name} är inte längre med i Redaktionen`)}>Ta bort ur Redaktionen</button>`
           : html`<button class="link" onClick=${() => confirm(`Lägga till ${user.name} i Redaktionen? Då kan hen ta bort inlägg, grupper och konton.`) && editorAct(() => api.setEditor(id, true), `${user.name} är nu med i Redaktionen`)}>Lägg till i Redaktionen</button>`}
         ${!isMe && html`<button class="link danger" onClick=${async () => { if (await editorDelete('user', id, `användaren ${user.name} och allt hen lagt upp`)) go('/'); }}>Ta bort användaren</button>`}
       </span>`}
@@ -245,15 +243,31 @@ function PushSetting({ settings = false }) {
   }
   return html`<div class="setting-row">
     ${state === 'på' ? html`<span><b>Notiser är på.</b> Du får besked om nya meddelanden och ansökningar, och en siffra på appikonen.</span><button class="btn small" onClick=${off}>Stäng av</button>`
-      : state === 'nekad' ? html`<span><b>Notiser är blockerade.</b> Slå på dem för appen i telefonens eller webbläsarens inställningar.</span>`
+      : state === 'nekad' ? html`<span><b>Notiser är blockerade för appen.</b> Du har tidigare tackat nej, så appen får inte fråga igen – du slår på dem själv:
+          <ol class="howto">${blockedSteps().map((t) => html`<li>${t}</li>`)}</ol>
+          <button class="btn small" onClick=${() => location.reload()}>Jag har slagit på dem – kolla igen</button></span>`
       : html`<span><b>Notiser är av.</b> Slå på för att få besked om nya meddelanden och ansökningar, och en siffra på appikonen.</span><button class="btn small primary" onClick=${on}>Slå på</button>`}
   </div>`;
+}
+
+// Var man slår på notiser igen efter att ha tackat nej – olika för varje telefon och webbläsare.
+function blockedSteps(ua = navigator.userAgent) {
+  const B = (t) => html`<b>${t}</b>`;
+  if (/iphone|ipad/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) return [
+    html`Öppna ${B('Inställningar')} på telefonen.`, html`Tryck på ${B('Notiser')} och leta upp ${B('Omställningsplatser')} i listan.`,
+    html`Slå på ${B('Tillåt notiser')} (och gärna ${B('Symboler')} för siffran på ikonen).`, 'Gå tillbaka hit och tryck på knappen nedan.'];
+  if (/android/i.test(ua)) return [
+    html`Håll fingret på appikonen ${B('Omställningsplatser')} och tryck på ${B('ⓘ')} (Appinformation) – eller öppna sidan i Chrome och tryck på ${B('⋮')} → ${B('ⓘ')}.`,
+    html`Välj ${B('Aviseringar')} eller ${B('Behörigheter → Aviseringar')}.`, html`Slå på ${B('Tillåt')}.`, 'Gå tillbaka hit och tryck på knappen nedan.'];
+  if (/Firefox/i.test(ua)) return [html`Klicka på ${B('låset')} till vänster om adressen.`, html`Ta bort spärren vid ${B('Skicka aviseringar')}.`, 'Ladda om sidan och tryck på Slå på.'];
+  if (/Safari/i.test(ua) && !/Chrome|Chromium|Edg/i.test(ua)) return [html`Välj ${B('Safari → Inställningar → Webbplatser → Notiser')} i menyn.`,
+    html`Ändra ${B('osaisacson.github.io')} till ${B('Tillåt')}.`, 'Tryck på knappen nedan.'];
+  return [html`Klicka på ikonen ${B('⚙ / låset')} till vänster om adressen.`, html`Ändra ${B('Aviseringar')} till ${B('Tillåt')}.`, 'Tryck på knappen nedan.'];
 }
 
 export function EditProfile() {
   const s = useStore();
   const [name, setName] = useState(s.me.name);
-  const [nickname, setNickname] = useState(s.me.nickname || '');
   const [file, setFile] = useState(null);
   const [home, setHome] = useState(() => (s.me.home ? { ...emptyHome(), ...s.me.home } : emptyHome()));
   const groups = useAsync(() => api.listGroups(), []);
@@ -261,7 +275,7 @@ export function EditProfile() {
     e.preventDefault();
     const changed = home.country && JSON.stringify(home) !== JSON.stringify(s.me.home ? { ...emptyHome(), ...s.me.home } : emptyHome());
     if (changed && checkHome(home)) return toast(checkHome(home));
-    if (await attempt(() => api.updateProfile({ name, nickname, avatarFile: file, home: changed ? home : undefined }), 'Profilen sparades')) {
+    if (await attempt(() => api.updateProfile({ name, avatarFile: file, home: changed ? home : undefined }), 'Profilen sparades')) {
       await refreshMe(); go('/profil/' + s.me.id);
     }
   }
@@ -272,18 +286,20 @@ export function EditProfile() {
     if (confirm(msg) && await attempt(() => api.leaveGroup(g.id), `Du har lämnat ${g.name}`)) await refreshMe();
   }
   return html`<div class="page">
-    <${Header} title="Redigera profil" back />
+    <${Header} title="Profil och inställningar" back />
     <form class="form pad" onSubmit=${save}>
       <${ImagePicker} current=${s.me.avatar_url} name=${s.me.name} onFile=${setFile} label="Byt profilbild" />
       <label>Namn<input required value=${name} onInput=${(e) => setName(e.target.value)} /></label>
-      <label>Smeknamn <small>(valfritt)</small><input value=${nickname} onInput=${(e) => setNickname(e.target.value)} /></label>
       <${HomePlaceFields} value=${home} onChange=${setHome} groups=${groups.data} />
       <small class="muted">Din plats syns bara för dig. Den bestämmer var appen startar.</small>
       <button class="btn primary block">Spara</button>
     </form>
-    <div class="label pad-x">Notiser</div>
+    <h2 class="settings-title">Notiser</h2>
     <div class="pad-x settings-block"><${PushSetting} settings /></div>
-    ${s.myGroups.length > 0 && html`<div class="label pad-x">Dina grupper</div>
+    ${s.me.is_editor && html`<h2 class="settings-title">Redaktionen</h2>
+      <div class="pad-x settings-block"><div class="setting-row"><span>Du är med i Redaktionen och kan hantera anmälningar och ta bort innehåll.</span>
+        <button class="btn small" onClick=${async () => { if (confirm('Lämna Redaktionen? Någon i Redaktionen kan lägga till dig igen.') && await attempt(() => api.setEditor(s.me.id, false), 'Du har lämnat Redaktionen')) await refreshMe(); }}>Lämna</button></div></div>`}
+    ${s.myGroups.length > 0 && html`<h2 class="settings-title">Dina grupper</h2>
     <div class="list">${s.myGroups.map((g) => html`<div class="row" key=${g.id}>
       <a href=${'#/grupp/' + g.id}><${Avatar} src=${g.avatar_url} name=${g.name} size=${40} /></a>
       <a class="row-main" href=${'#/grupp/' + g.id}><strong>${g.name}</strong><small class="muted">${g.role === 'admin' ? 'Admin' : 'Medlem'}</small></a>

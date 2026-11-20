@@ -779,8 +779,8 @@ create table if not exists public.feedback (
   id uuid primary key default gen_random_uuid(),
   author_id uuid not null references public.profiles(id) on delete cascade default auth.uid(),
   title text not null check (length(trim(title)) between 3 and 140),
-  body text not null default '' check (length(body) <= 4000),
-  status text check (status in ('planerad', 'klar', 'inte nu')),
+  body text not null check (length(trim(body)) between 1 and 4000),
+  status text check (status in ('planerad', 'klar')),
   created_at timestamptz not null default now()
 );
 create table if not exists public.feedback_votes (
@@ -792,6 +792,7 @@ create table if not exists public.feedback_votes (
 create table if not exists public.feedback_comments (
   id uuid primary key default gen_random_uuid(),
   feedback_id uuid not null references public.feedback(id) on delete cascade,
+  parent_id uuid references public.feedback_comments(id) on delete cascade,
   author_id uuid not null references public.profiles(id) on delete cascade default auth.uid(),
   body text not null check (length(trim(body)) between 1 and 2000),
   created_at timestamptz not null default now()

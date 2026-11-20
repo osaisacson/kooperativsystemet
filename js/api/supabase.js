@@ -388,6 +388,7 @@ export const api = {
   },
   async createFeedback({ title, body }) {
     if ((title || '').trim().length < 3) throw new Error('Skriv en rubrik (minst tre tecken).');
+    if (!(body || '').trim()) throw new Error('Beskriv förslaget eller problemet.');
     const f = ok(await sb.from('feedback').insert({ title: title.trim(), body: (body || '').trim(), author_id: needMe() }).select('id').single());
     ok(await sb.from('feedback_votes').insert({ feedback_id: f.id, user_id: needMe(), value: 1 }));
     return f.id;
@@ -396,9 +397,9 @@ export const api = {
     if (!value) ok(await sb.from('feedback_votes').delete().eq('feedback_id', id).eq('user_id', needMe()));
     else ok(await sb.from('feedback_votes').upsert({ feedback_id: id, user_id: needMe(), value }, { onConflict: 'feedback_id,user_id' }));
   },
-  async commentFeedback(id, body) {
+  async commentFeedback(id, body, parentId = null) {
     if (!body?.trim()) throw new Error('Skriv något först.');
-    ok(await sb.from('feedback_comments').insert({ feedback_id: id, author_id: needMe(), body: body.trim() }));
+    ok(await sb.from('feedback_comments').insert({ feedback_id: id, parent_id: parentId, author_id: needMe(), body: body.trim() }));
   },
   async deleteFeedback(id) {
     const rows = ok(await sb.from('feedback').delete().eq('id', id).select('id'));

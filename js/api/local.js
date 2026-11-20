@@ -24,7 +24,7 @@ db.reports ??= [];
 db.editorLog ??= [];
 db.feedback ??= [
   { id: uuid0(), author_id: db.profiles[1]?.id, title: 'Visa evenemang på kartan också', body: 'Det vore smidigt att se vad som händer i närheten direkt på kartan.', status: 'planerad', created_at: new Date(Date.now() - 3 * 864e5).toISOString() },
-  { id: uuid0(), author_id: db.profiles[2]?.id, title: 'Mörkt läge', body: '', status: null, created_at: new Date(Date.now() - 864e5).toISOString() },
+  { id: uuid0(), author_id: db.profiles[2]?.id, title: 'Mörkt läge', body: 'Ett mörkt läge vore skönare att använda på kvällen.', status: null, created_at: new Date(Date.now() - 864e5).toISOString() },
 ];
 db.feedbackVotes ??= db.feedback.flatMap((f, i) => db.profiles.slice(0, 4 - i * 2).map((p) => ({ feedback_id: f.id, user_id: p.id, value: 1 })));
 db.feedbackComments ??= [];
@@ -586,6 +586,7 @@ export const api = {
   async createFeedback({ title, body }) {
     const me = needMe();
     if ((title || '').trim().length < 3) throw new Error('Skriv en rubrik (minst tre tecken).');
+    if (!(body || '').trim()) throw new Error('Beskriv förslaget eller problemet.');
     const f = { id: uuid(), author_id: me, title: title.trim(), body: (body || '').trim(), status: null, created_at: now() };
     db.feedback.push(f); db.feedbackVotes.push({ feedback_id: f.id, user_id: me, value: 1 });
     persist(); return f.id;
@@ -596,10 +597,10 @@ export const api = {
     if (value) db.feedbackVotes.push({ feedback_id: id, user_id: me, value });
     persist();
   },
-  async commentFeedback(id, body) {
+  async commentFeedback(id, body, parentId = null) {
     const me = needMe();
     if (!body?.trim()) throw new Error('Skriv något först.');
-    db.feedbackComments.push({ id: uuid(), feedback_id: id, author_id: me, body: body.trim(), created_at: now() });
+    db.feedbackComments.push({ id: uuid(), feedback_id: id, parent_id: parentId, author_id: me, body: body.trim(), created_at: now() });
     persist();
   },
   async deleteFeedback(id) {
@@ -610,7 +611,9 @@ export const api = {
     const me = needMe();
     const c = db.feedbackComments.find((x) => x.id === id);
     if (!c || (c.author_id !== me && !db.editors.includes(me))) throw new Error('Det gick inte att ta bort.');
-    db.feedbackComments = db.feedbackComments.filter((x) => x.id !== id); persist();
+    const gone = new Set([id]);
+    for (let n = 0; n !== gone.size;) { n = gone.size; db.feedbackComments.forEach((x) => { if (gone.has(x.parent_id)) gone.add(x.id); }); }
+    db.feedbackComments = db.feedbackComments.filter((x) => !gone.has(x.id)); persist();
   },
   async setFeedbackStatus(id, status) {
     const me = needEditor();
