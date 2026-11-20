@@ -29,7 +29,7 @@ function route({ parts: [a, b, c], query }) {
     case 'karta': return html`<${MapView} />`;
     case 'kalender': return html`<${Home} tab="evenemang" />`;   // gamla länkar
     case 'profil': return html`<${Profile} id=${b} />`;
-    case 'redigera-profil': return html`<${EditProfile} />`;
+    case 'redigera-profil': return html`<${EditProfile} section=${query.get('del')} />`;
     case 'grupp': return c === 'installningar' ? html`<${GroupSettings} id=${b} />` : html`<${GroupView} id=${b} />`;
     case 'ny-grupp': return html`<${NewGroup} next=${query.get('next')} />`;
     case 'valkommen': return html`<${Welcome} />`;

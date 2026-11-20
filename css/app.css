@@ -741,3 +741,6 @@ a.todo small { display: block; }
 .search-tabs button { flex: 0 0 auto; padding-inline: 12px; scroll-snap-align: start; }
 .place-what { white-space: nowrap; }
 .search-page .searchbar { position: static; padding-top: 2px; }
+.cal-setting { flex-direction: column; align-items: stretch; gap: 10px; }
+.cal-btns { flex-wrap: wrap; }
+.cal-sub { display: block; margin: 8px 16px 4px; font-size: 14px; }

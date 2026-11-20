@@ -251,3 +251,6 @@ export function googleCalendarUrl(p, url) {
   const end = p.event_end || new Date(new Date(p.event_start).getTime() + 2 * 3600e3).toISOString();
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(eventTitle(p))}&dates=${z(p.event_start)}/${z(end)}&details=${encodeURIComponent(p.caption + '\n\n' + url)}&location=${encodeURIComponent([p.event_address, p.event_city].filter(Boolean).join(', '))}`;
 }
+
+// Har man lagt till kalenderprenumerationen (på den här enheten)?
+export const calendarSubscribed = () => { try { return !!localStorage.getItem('kalender-prenumererar'); } catch { return false; } };

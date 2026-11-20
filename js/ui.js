@@ -3,7 +3,7 @@ import { html, useState, useEffect, useRef } from './lib.js';
 import { api } from './api/index.js';
 import { SUPABASE_URL } from './config.js';
 import { state, go, goBack, toast, refreshBadges, refreshMe, attempt } from './store.js';
-import { fmtKr, fmtDate, timeAgo, PAYOUT_BANK_LIMIT, SPACE_COSTS, postType, fmtEventTime, eventIcs, googleCalendarUrl, eventTitle } from './util.js';
+import { fmtKr, fmtDate, timeAgo, PAYOUT_BANK_LIMIT, SPACE_COSTS, postType, fmtEventTime, eventTitle, calendarSubscribed } from './util.js';
 
 const ICONS = {
   home: '<path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/>',
@@ -314,19 +314,16 @@ export function EventBox({ post: p }) {
     setMine(next); setCounts(c);
     if (await attempt(() => api.setRsvp(p.id, next)) === false) { setMine(before.mine); setCounts(before.counts); }
   }
-  function addToCalendar() {
-    const ics = eventIcs(p, url);
-    const ios = /iphone|ipad/i.test(navigator.userAgent);
-    if (ios && api.mode === 'supabase') {
-      // Öppnas i ett eget fönster så att appen ligger kvar bakom (att byta ut appen mot filen gav en vit sida)
-      window.open(`${SUPABASE_URL}/functions/v1/kalender?e=${p.id}`, '_blank');
-      return;
+  // Kalendern: evenemanget markeras som intressant (om man inte redan svarat) och kommer då med i ens
+  // kalenderprenumeration. Har man ingen prenumeration än tas man till inställningen.
+  async function addToCalendar() {
+    if (!mine) {
+      if (p.event_rsvp) await rsvp('interested');
+      else if (await attempt(() => api.setRsvp(p.id, 'interested')) === false) return;
+      else setMine('interested');
     }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
-    a.download = eventTitle(p).replace(/[^\wåäöÅÄÖ -]/g, '').trim().slice(0, 40) + '.ics';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    if (calendarSubscribed()) toast('Det hamnar i din kalender inom en timme');
+    else go('/redigera-profil?del=kalender');
   }
   const where = [p.event_address, p.event_address?.includes(p.event_city || '§') ? null : p.event_city].filter(Boolean).join(', ');
   return html`<div class=${'event' + (past ? ' past' : '')}>
@@ -336,8 +333,7 @@ export function EventBox({ post: p }) {
       <button class=${'btn small' + (mine === 'interested' ? ' primary' : '')} onClick=${() => rsvp('interested')}>Intresserad · ${counts.interested}</button>
       <button class=${'btn small' + (mine === 'going' ? ' primary' : '')} onClick=${() => rsvp('going')}>Kommer · ${counts.going}</button>
     </div>`}
-    ${!past && html`<div class="event-cal"><button class="link" onClick=${addToCalendar}>Lägg till i min kalender</button>
-      <span class="muted">·</span><a class="link" href=${googleCalendarUrl(p, url)} target="_blank" rel="noopener">Google Kalender</a></div>`}
+    ${!past && html`<div class="event-cal"><button class="link" onClick=${addToCalendar}>${mine && calendarSubscribed() ? '✓ I din kalender' : 'Lägg till i min kalender'}</button></div>`}
   </div>`;
 }
 

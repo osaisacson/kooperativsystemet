@@ -6,7 +6,7 @@ import { useStore, useAsync, go, attempt, refreshMe, refreshBadges, setState, to
 import { Avatar, Header, PostGrid, GroupRow, UserRow, ImagePicker, Loading, ErrorBox, ReportForm, editorDelete } from '../ui.js';
 import { Terms } from './help.js';
 import { HomePlaceFields, checkHome, emptyHome, PlaceSwitcher } from './place.js';
-import { EventsList } from './calendar.js';
+import { EventsList, CalendarSetting } from './calendar.js';
 import { inPlace, postPlace, postType, placeLabel, zoomOut } from '../util.js';
 
 const PROVIDERS = {
@@ -193,6 +193,7 @@ export function Profile({ id }) {
         : html`<a class="btn primary" href=${'#/meddelanden/' + id}>Skicka meddelande</a>`}
     </div>
     ${isMe && html`<${PushSetting} />`}
+    ${isMe && html`<${CalendarSetting} prompt />`}
     ${isMe && user.groups.length === 0 && html`<p class="muted small pad-x">Du är inte med i någon grupp än – tryck på <b>+</b> för att gå med i en eller skapa en ny.</p>`}
     <div class="grid-sep"></div>
     ${posts.data ? html`<${PostGrid} posts=${posts.data} />` : html`<${Loading} />`}
@@ -312,8 +313,9 @@ function blockedSteps(ua = navigator.userAgent) {
     html`Leta upp ${B('Aviseringar')} (eller ${B('Notiser')}) i rutan som öppnas och ändra till ${B('Tillåt')}.`, system, 'Tryck på knappen nedan.'].filter(Boolean);
 }
 
-export function EditProfile() {
+export function EditProfile({ section }) {
   const s = useStore();
+  useEffect(() => { if (section) setTimeout(() => document.getElementById(section)?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 300); }, [section]);
   const [name, setName] = useState(s.me.name);
   const [file, setFile] = useState(null);
   const [home, setHome] = useState(() => (s.me.home ? { ...emptyHome(), ...s.me.home } : emptyHome()));
@@ -341,6 +343,8 @@ export function EditProfile() {
       <small class="muted">Din plats syns bara för dig. Den bestämmer var appen startar.</small>
       <button class="btn primary block">Spara</button>
     </form>
+    <h2 class="settings-title" id="kalender-rubrik">Kalender</h2>
+    <div class="pad-x settings-block"><${CalendarSetting} /></div>
     <h2 class="settings-title">Notiser</h2>
     <div class="pad-x settings-block"><${PushSetting} settings /></div>
     ${s.me.is_editor && html`<h2 class="settings-title">Redaktionen</h2>
