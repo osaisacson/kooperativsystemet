@@ -3,13 +3,7 @@ import { html, useState } from '../lib.js';
 import { api } from '../api/index.js';
 import { useAsync, toast } from '../store.js';
 import { Avatar, Loading, ErrorBox } from '../ui.js';
-import { inPlace, eventTitle } from '../util.js';
-
-// Var evenemanget äger rum – evenemangets egen plats, annars gruppens.
-// Har evenemanget en egen plats används den helt (även postnumret, för stadsdelen).
-const eventPlace = (p) => (p.event_city || p.event_postcode
-  ? { city: p.event_city, region: p.event_region, country: p.event_country || p.group?.country, postcode: p.event_postcode }
-  : { city: p.group?.city, region: p.group?.region, country: p.group?.country, postcode: p.group?.postcode });
+import { inPlace, postPlace, eventTitle } from '../util.js';
 
 // Prenumerera: telefonens kalender hämtar en egen länk regelbundet, så evenemang man är intresserad av
 // eller kommer på läggs till – och ändras eller försvinner – av sig själva.
@@ -32,9 +26,9 @@ function Subscribe() {
 }
 
 // Fliken Events i flödet: kommande evenemang i vald plats, dag för dag.
-export function EventsList({ place, empty }) {
+export function EventsList({ place, empty, match = () => true, subscribe = true }) {
   const events = useAsync(() => api.listEvents(), []);
-  const list = (events.data || []).filter((p) => inPlace(eventPlace(p), place));
+  const list = (events.data || []).filter((p) => inPlace(postPlace(p), place) && match(p));
 
   // Gruppera per dag
   const days = [];
@@ -54,7 +48,7 @@ export function EventsList({ place, empty }) {
   const time = (iso) => new Date(iso).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
 
   return html`<div class="events">
-    <${Subscribe} />
+    ${subscribe && html`<${Subscribe} />`}
     ${events.loading && !events.data ? html`<${Loading} />` : events.error ? html`<${ErrorBox} error=${events.error} />`
       : !days.length ? empty
       : days.map((d) => html`<section class="cal-day" key=${d.key}>

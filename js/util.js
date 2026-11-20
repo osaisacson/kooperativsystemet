@@ -29,6 +29,11 @@ export function inPlace(group, place) {
   if (place.level === 'city') return same('country') && same('city');
   return same('country') && !!pcKey(group.postcode) && pcKey(group.postcode) === pcKey(place.postcode);
 }
+// Var ett inlägg hör hemma: ett evenemang med egen plats räknas dit, annars gruppens plats.
+export function postPlace(p) {
+  if (p?.event_city || p?.event_postcode) return { city: p.event_city, region: p.event_region, country: p.event_country || p.group?.country, postcode: p.event_postcode };
+  return p?.group || null;
+}
 // Ett steg utåt (stadsdel → stad → region → land → hela världen). Nivåer som saknas hoppas över.
 // De inre fälten sparas, så att man kan zooma in igen till samma ställe.
 export function zoomOut(place) {

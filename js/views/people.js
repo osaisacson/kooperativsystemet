@@ -5,7 +5,9 @@ import { APP_NAME, AUTH_PROVIDERS, VAPID_PUBLIC_KEY } from '../config.js';
 import { useStore, useAsync, go, attempt, refreshMe, refreshBadges, setState, toast } from '../store.js';
 import { Avatar, Header, PostGrid, GroupRow, UserRow, ImagePicker, Loading, ErrorBox, ReportForm, editorDelete } from '../ui.js';
 import { Terms } from './help.js';
-import { HomePlaceFields, checkHome, emptyHome } from './place.js';
+import { HomePlaceFields, checkHome, emptyHome, PlaceSwitcher } from './place.js';
+import { EventsList } from './calendar.js';
+import { inPlace, postPlace, postType, placeLabel, zoomOut } from '../util.js';
 
 const PROVIDERS = {
   google: { label: 'Fortsätt med Google', icon: '<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>' },
@@ -85,29 +87,66 @@ export function AuthView() {
   </div>`;
 }
 
-const TABS = [['inlagg', 'Inlägg'], ['personer', 'Personer'], ['grupper', 'Grupper']];
+// Sök: allt inom området som är valt uppe till vänster (samma som i resten av appen), uppdelat i flikar.
+// Det man skriver begränsar alla flikar samtidigt; siffran på varje flik visar hur många träffar den har.
+const SEARCH_TABS = [['grupper', 'Grupper'], ['folk', 'Folk'], ['poster', 'Poster'], ['finansiering', 'Finansiering'],
+  ['lokaler', 'Lokaler'], ['evenemang', 'Events'], ['minne', 'Minne']];
+const OLD_TABS = { inlagg: 'poster', personer: 'folk' };
 
 export function Search({ tab: initialTab }) {
+  const s = useStore();
+  const place = s.place || { level: 'world' };
   const [q, setQ] = useState('');
   const [dq, setDq] = useState('');
-  const [tab, setTab] = useState(TABS.some(([k]) => k === initialTab) ? initialTab : 'inlagg');
-  useEffect(() => { const t = setTimeout(() => setDq(q), 250); return () => clearTimeout(t); }, [q]);
-  // Resultaten märks med vilken flik de hör till, så att gamla resultat aldrig ritas i fel flik.
-  const res = useAsync(async () => ({
-    tab, items: await (tab === 'inlagg' ? api.listPosts({ q: dq }) : tab === 'personer' ? api.listUsers(dq) : api.listGroups(dq)),
-  }), [tab, dq]);
-  const placeholder = { inlagg: 'Sök bland alla inlägg', personer: 'Sök bland alla personer', grupper: 'Sök bland alla grupper' }[tab];
-  const items = res.data?.tab === tab ? res.data.items : null;
-  return html`<div class="page">
-    <div class="searchbar"><input type="search" value=${q} onInput=${(e) => setQ(e.target.value)} placeholder=${placeholder} aria-label=${placeholder} /></div>
-    <div class="tabs" role="tablist">${TABS.map(([k, label]) => html`<button role="tab" aria-selected=${tab === k} class=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${label}</button>`)}</div>
-    ${res.error ? html`<${ErrorBox} error=${res.error} />` : !items ? html`<${Loading} />`
-      : tab === 'inlagg' ? html`<${PostGrid} posts=${items} showAuthor empty="Inga inlägg hittades." />`
-      : tab === 'personer'
-        ? (items.length ? html`<div class="list">${items.map((u) => html`<${UserRow} key=${u.id} user=${u} />`)}</div>` : html`<p class="empty">Inget hittades.</p>`)
-        : html`<div class="list">
-            <a class="row" href="#/ny-grupp"><span class="avatar plus">+</span><span class="row-main"><strong>Skapa ny grupp</strong></span></a>
-            ${items.map((g) => html`<${GroupRow} key=${g.id} group=${g} onChange=${res.reload} />`)}</div>`}
+  const start = OLD_TABS[initialTab] || initialTab;
+  const [tab, setTab] = useState(() => { try { return SEARCH_TABS.some(([k]) => k === start) ? start : sessionStorage.getItem('sok-flik') || 'grupper'; } catch { return 'grupper'; } });
+  const choose = (k) => { setTab(k); try { sessionStorage.setItem('sok-flik', k); } catch { /* ok */ } };
+  useEffect(() => { const t = setTimeout(() => setDq(q), 200); return () => clearTimeout(t); }, [q]);
+  const groups = useAsync(() => api.listGroups(), []);
+  const users = useAsync(() => api.listUsers(), []);
+  const posts = useAsync(() => api.listPosts(), []);
+  const events = useAsync(() => api.listEvents(), []);
+
+  const needle = dq.trim().toLowerCase();
+  const has = (...xs) => !needle || xs.some((x) => String(x || '').toLowerCase().includes(needle));
+  const postText = (p) => [p.caption, p.author?.name, p.group?.name, ...(p.categories || []), ...(p.slides || []).map((x) => x.text),
+    p.event_title, p.event_address, p.event_city, ...(p.space_functions || [])];
+  const postMatch = (p) => has(...postText(p));
+
+  const localGroups = (groups.data || []).filter((g) => inPlace(g, place));
+  // Folk i ett område = de som är med i grupperna där (var man själv bor syns bara för en själv).
+  const memberIds = new Set(localGroups.flatMap((g) => g.member_ids || []));
+  const people = (users.data || []).filter((u) => (place.level === 'world' || memberIds.has(u.id)) && has(u.name));
+  const localPosts = (posts.data || []).filter((p) => inPlace(postPlace(p), place) && postMatch(p));
+  const lists = {
+    grupper: localGroups.filter((g) => has(g.name, g.description, g.city, g.region, g.address)),
+    folk: people,
+    poster: localPosts,
+    finansiering: localPosts.filter((p) => postType(p) === 'finansiering'),
+    lokaler: localPosts.filter((p) => postType(p) === 'lokal'),
+    evenemang: (events.data || []).filter((p) => inPlace(postPlace(p), place) && postMatch(p)),
+    minne: localPosts.filter((p) => p.memory_count > 0).sort((a, b) => b.memory_count - a.memory_count),
+  };
+  const loading = { grupper: groups, folk: users, evenemang: events }[tab] || posts;
+  const items = lists[tab];
+  const where = placeLabel(place);
+  const what = { grupper: 'grupper', folk: 'personer', poster: 'poster', finansiering: 'finansiering', lokaler: 'lokaler', evenemang: 'kommande evenemang', minne: 'sparat i minnet' }[tab];
+  const empty = html`<p class="empty">${needle ? `Inga ${what} i ${where} som matchar ”${dq.trim()}”.` : `Inga ${what} i ${where} än.`}
+    ${place.level !== 'world' && html`<br /><span class="small">Tryck på <b>‹</b> uppe till vänster för att söka i ${placeLabel(zoomOut(place))}.</span>`}</p>`;
+
+  return html`<div class="page search-page">
+    <header class="topbar brand"><${PlaceSwitcher} groups=${groups.data || []} /></header>
+    <p class="search-hint">Välj område uppe till vänster – stadsdel, stad, region, land eller hela världen – och skriv för att hitta det du letar efter där.</p>
+    <div class="searchbar"><input type="search" value=${q} onInput=${(e) => setQ(e.target.value)} placeholder=${`Sök i ${where}`} aria-label=${`Sök i ${where}`} /></div>
+    <div class="filterbar search-tabs" role="tablist">${SEARCH_TABS.map(([k, label]) => html`<button role="tab" aria-selected=${tab === k} class=${tab === k ? 'on' : ''} onClick=${() => choose(k)}>
+      ${label}${(k === 'folk' ? users.data && groups.data : k === 'grupper' ? groups.data : k === 'evenemang' ? events.data : posts.data) ? html` <span class="tab-n">${lists[k].length}</span>` : ''}</button>`)}</div>
+    ${loading.error ? html`<${ErrorBox} error=${loading.error} />` : (loading.loading && !loading.data) || (tab === 'folk' && !groups.data) ? html`<${Loading} />`
+      : tab === 'grupper' ? html`<div class="list">
+          <a class="row" href="#/ny-grupp"><span class="avatar plus">+</span><span class="row-main"><strong>Skapa ny grupp</strong></span></a>
+          ${items.map((g) => html`<${GroupRow} key=${g.id} group=${g} onChange=${groups.reload} />`)}</div>${!items.length && empty}`
+      : tab === 'folk' ? (items.length ? html`<div class="list">${items.map((u) => html`<${UserRow} key=${u.id} user=${u} />`)}</div>` : empty)
+      : tab === 'evenemang' ? html`<${EventsList} place=${place} match=${postMatch} subscribe=${false} empty=${empty} />`
+      : items.length ? html`<${PostGrid} posts=${items} showAuthor />` : empty}
   </div>`;
 }
 
@@ -215,7 +254,9 @@ function PushSetting({ settings = false }) {
   if (!supported) {
     if (settings && !(ios && !standalone)) return html`<div class="setting-row"><span class="muted">${api.mode === 'demo' ? 'Notiser fungerar inte i demoläget.' : 'Notiser fungerar inte i den här webbläsaren.'}</span></div>`;
     if (!(ios && !standalone) || (!settings && dismissed)) return null;
-    return html`<div class=${settings ? 'setting-row' : 'nudge badge-setting'}><span>Spara appen på hemskärmen för att kunna få notiser och en siffra på appikonen.</span>
+    return html`<div class=${settings ? 'setting-row' : 'nudge badge-setting'}><span>På iPhone fungerar notiser bara i appen sparad på hemskärmen – i Safari frågar telefonen aldrig.
+      ${settings && html`<ol class="howto"><li>Tryck på <b>Dela ⬆︎</b> och välj <b>Lägg till på hemskärmen</b>.</li><li>Öppna appen från ikonen på hemskärmen.</li>
+        <li>Gå hit igen (Profil och inställningar) och tryck <b>Slå på</b> – då frågar telefonen om lov.</li></ol>`}</span>
       ${!settings && html`<button class="btn small" onClick=${dismiss}>Inte nu</button>`}</div>`;
   }
   async function on() {
@@ -246,23 +287,29 @@ function PushSetting({ settings = false }) {
       : state === 'nekad' ? html`<span><b>Notiser är blockerade för appen.</b> Du har tidigare tackat nej, så appen får inte fråga igen – du slår på dem själv:
           <ol class="howto">${blockedSteps().map((t) => html`<li>${t}</li>`)}</ol>
           <button class="btn small" onClick=${() => location.reload()}>Jag har slagit på dem – kolla igen</button></span>`
-      : html`<span><b>Notiser är av.</b> Slå på för att få besked om nya meddelanden och ansökningar, och en siffra på appikonen.</span><button class="btn small primary" onClick=${on}>Slå på</button>`}
+      : html`<span><b>Notiser är av.</b> Tryck <b>Slå på</b> så frågar ${ios ? 'telefonen' : 'webbläsaren'} om lov – svara <b>Tillåt</b>. Då får du besked om nya meddelanden och ansökningar, och en siffra på appikonen.</span><button class="btn small primary" onClick=${on}>Slå på</button>`}
   </div>`;
 }
 
 // Var man slår på notiser igen efter att ha tackat nej – olika för varje telefon och webbläsare.
 function blockedSteps(ua = navigator.userAgent) {
   const B = (t) => html`<b>${t}</b>`;
-  if (/iphone|ipad/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) return [
-    html`Öppna ${B('Inställningar')} på telefonen.`, html`Tryck på ${B('Notiser')} och leta upp ${B('Omställningsplatser')} i listan.`,
+  const bar = html`${B('adressfältet')} – fältet högst upp i webbläsaren där webbadressen (osaisacson.github.io/…) står`;
+  const mac = /Macintosh/i.test(ua), win = /Windows/i.test(ua);
+  const system = mac ? html`Får du ändå inga notiser: öppna ${B('Systeminställningar → Notiser')}, välj din webbläsare och slå på ${B('Tillåt notiser')}.`
+    : win ? html`Får du ändå inga notiser: öppna ${B('Inställningar → System → Meddelanden')} och slå på dem för din webbläsare.` : null;
+  if (/iphone|ipad/i.test(ua) || (mac && navigator.maxTouchPoints > 1)) return [
+    html`Öppna appen ${B('Inställningar')} på telefonen (den grå med kugghjulet).`, html`Tryck på ${B('Notiser')} och leta upp ${B('Omställningsplatser')} i listan.`,
     html`Slå på ${B('Tillåt notiser')} (och gärna ${B('Symboler')} för siffran på ikonen).`, 'Gå tillbaka hit och tryck på knappen nedan.'];
   if (/android/i.test(ua)) return [
     html`Håll fingret på appikonen ${B('Omställningsplatser')} och tryck på ${B('ⓘ')} (Appinformation) – eller öppna sidan i Chrome och tryck på ${B('⋮')} → ${B('ⓘ')}.`,
     html`Välj ${B('Aviseringar')} eller ${B('Behörigheter → Aviseringar')}.`, html`Slå på ${B('Tillåt')}.`, 'Gå tillbaka hit och tryck på knappen nedan.'];
-  if (/Firefox/i.test(ua)) return [html`Klicka på ${B('låset')} till vänster om adressen.`, html`Ta bort spärren vid ${B('Skicka aviseringar')}.`, 'Ladda om sidan och tryck på Slå på.'];
-  if (/Safari/i.test(ua) && !/Chrome|Chromium|Edg/i.test(ua)) return [html`Välj ${B('Safari → Inställningar → Webbplatser → Notiser')} i menyn.`,
-    html`Ändra ${B('osaisacson.github.io')} till ${B('Tillåt')}.`, 'Tryck på knappen nedan.'];
-  return [html`Klicka på ikonen ${B('⚙ / låset')} till vänster om adressen.`, html`Ändra ${B('Aviseringar')} till ${B('Tillåt')}.`, 'Tryck på knappen nedan.'];
+  if (/Safari/i.test(ua) && !/Chrome|Chromium|Edg|Firefox/i.test(ua)) return [
+    html`Välj ${B('Safari → Inställningar…')} i menyraden högst upp på skärmen och klicka på fliken ${B('Webbplatser')}.`,
+    html`Välj ${B('Notiser')} i listan till vänster och ändra ${B('osaisacson.github.io')} till ${B('Tillåt')}.`, system, 'Tryck på knappen nedan.'].filter(Boolean);
+  return [
+    html`Klicka på den lilla symbolen längst till vänster i ${bar}. Det är ett ${B('lås')} eller två små ${B('reglage')}.`,
+    html`Leta upp ${B('Aviseringar')} (eller ${B('Notiser')}) i rutan som öppnas och ändra till ${B('Tillåt')}.`, system, 'Tryck på knappen nedan.'].filter(Boolean);
 }
 
 export function EditProfile() {

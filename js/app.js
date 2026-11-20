@@ -45,7 +45,7 @@ function BottomNav({ r }) {
   const [a, b] = r.parts;
   // På mobilen en meny längst ner; på surfplatta och dator en meny till vänster med text (se app.css).
   const item = (href, label, on, icon, n, cls = '') => html`<a href=${href} aria-label=${label} title=${label} class=${(on ? 'on ' : '') + cls}>${icon}<${Count} n=${n} /><span class="nav-label">${label}</span></a>`;
-  // Mobilen: Hem, Sök, + (i mitten), Profil, ?. Karta, meddelanden och checklista finns överst i flödet där.
+  // Mobilen: Hem, Sök, + (i mitten), ?, Profil. Karta, meddelanden och checklista finns överst i flödet där.
   return html`<nav class="bottomnav">
     <a class="nav-logo desk" href="#/" aria-hidden="true" tabindex="-1"><img src="icon.svg" alt="" width="32" height="32" /><span class="nav-label">Omställningsplatser</span></a>
     ${item('#/', 'Hem', !a, html`<${Icon} name="home" size=${26} />`)}
@@ -54,8 +54,8 @@ function BottomNav({ r }) {
     ${item('#/meddelanden', 'Meddelanden', a === 'meddelanden', html`<${Icon} name="chat" size=${26} />`, s.badges.messages, 'desk')}
     ${(s.badges.todos > 0 || s.me.is_editor) && item('#/att-gora', 'Checklista', a === 'att-gora', html`<${Icon} name="check" size=${26} />`, s.badges.todos, 'desk')}
     ${item('#/ny', 'Nytt inlägg', a === 'ny', html`<span class="nav-new-btn"><${Icon} name="add" size=${26} /></span>`, 0, 'nav-new')}
-    ${item('#/profil/' + s.me.id, 'Profil', a === 'profil' && b === s.me.id, html`<span class="nav-avatar"><${Avatar} src=${s.me.avatar_url} name=${s.me.name} size=${26} /></span>`)}
     ${item('#/hjalp', 'Hjälp och feedback', a === 'hjalp' || a === 'feedback', html`<${Icon} name="help" size=${26} />`)}
+    ${item('#/profil/' + s.me.id, 'Profil', a === 'profil' && b === s.me.id, html`<span class="nav-avatar"><${Avatar} src=${s.me.avatar_url} name=${s.me.name} size=${26} /></span>`)}
   </nav>`;
 }
 

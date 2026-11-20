@@ -1,6 +1,7 @@
 // Plats: väljaren överst (‹ Göteborg ›) och fälten där man anger var man håller till.
 // Att kunna se det som händer i en stadsdel, en stad, en region, ett land eller hela världen är kärnan i appen.
 import { html, useState, useEffect, useRef } from '../lib.js';
+import { api } from '../api/index.js';
 import { useStore, setPlace } from '../store.js';
 import { Sheet } from '../ui.js';
 import { LEVELS, SE_REGIONS, placeLabel, zoomOut, zoomIn, pcKey, fmtPostcode, lookupPostcode, countryNames } from '../util.js';
@@ -8,23 +9,43 @@ import { LEVELS, SE_REGIONS, placeLabel, zoomOut, zoomIn, pcKey, fmtPostcode, lo
 const lc = (x) => (x || '').toLowerCase();
 const LEVEL_TITLE = { country: 'land', region: 'region', city: 'stad', district: 'stadsdel' };
 
-// Alla platser där det finns grupper, per nivå, med antal grupper. Samma regler som inPlace().
-export function placeOptions(groups) {
+// Alla platser där det finns något, per nivå: grupper, evenemang med egen plats och ens egen plats
+// (som syns i listan även om inget finns där än). Samma regler som inPlace().
+export function placeOptions(groups, extras = []) {
   const maps = { country: new Map(), region: new Map(), city: new Map(), district: new Map() };
-  const add = (level, key, o) => {
-    const m = maps[level]; const x = m.get(key) || { ...o, level, n: 0 }; x.n++;
+  const add = (level, key, o, field) => {
+    const m = maps[level]; const x = m.get(key) || { ...o, level, n: 0, ev: 0, home: false };
+    if (field === 'home') x.home = true; else x[field]++;
     m.set(key, x);
   };
-  for (const g of groups) {
+  const addAll = (g, field) => {
     const c = lc(g.country);
-    if (g.country) add('country', c, { country: g.country });
-    if (g.region) add('region', `${c}|${lc(g.region)}`, { region: g.region, country: g.country });
-    if (g.city) add('city', `${c}|${lc(g.city)}`, { city: g.city, region: g.region, country: g.country });
-    if (pcKey(g.postcode)) add('district', `${c}|${pcKey(g.postcode)}`, { postcode: fmtPostcode(g.postcode), city: g.city, region: g.region, country: g.country });
-  }
+    if (g.country) add('country', c, { country: g.country }, field);
+    if (g.region) add('region', `${c}|${lc(g.region)}`, { region: g.region, country: g.country }, field);
+    if (g.city) add('city', `${c}|${lc(g.city)}`, { city: g.city, region: g.region, country: g.country }, field);
+    if (pcKey(g.postcode)) add('district', `${c}|${pcKey(g.postcode)}`, { postcode: fmtPostcode(g.postcode), city: g.city, region: g.region, country: g.country, district: g.district || null }, field);
+  };
+  for (const g of groups) addAll(g, 'n');
+  for (const x of extras) addAll(x, x.kind === 'home' ? 'home' : 'ev');
   const name = (o) => (o.level === 'district' ? o.postcode : o[o.level]);
-  const sort = (m) => [...m.values()].sort((a, b) => b.n - a.n || name(a).localeCompare(name(b), 'sv'));
+  const sort = (m) => [...m.values()].sort((a, b) => b.home - a.home || b.n - a.n || b.ev - a.ev || name(a).localeCompare(name(b), 'sv'));
   return { country: sort(maps.country), region: sort(maps.region), city: sort(maps.city), district: sort(maps.district) };
+}
+
+// Platser utan grupper som ändå ska gå att välja: ens egen plats och evenemang med egen adress.
+let eventPlaces = null;
+export function usePlaceExtras() {
+  const s = useStore();
+  const [events, setEvents] = useState(eventPlaces?.value || []);
+  useEffect(() => {
+    eventPlaces ||= { promise: api.listEvents().catch(() => []).then((list) => list.filter((p) => p.event_city || p.event_postcode)
+      .map((p) => ({ kind: 'event', country: p.event_country || p.group?.country, region: p.event_region, city: p.event_city, postcode: p.event_postcode }))) };
+    let alive = true;
+    eventPlaces.promise.then((v) => { eventPlaces.value = v; if (alive) setEvents(v); });
+    return () => { alive = false; };
+  }, []);
+  const home = s.me?.home?.country ? [{ kind: 'home', ...s.me.home }] : [];
+  return [...home, ...events];
 }
 
 // Namnen på stadsdelarna hämtas i bakgrunden, ett postnummer i taget. Hittas inget visas bara numret.
@@ -51,6 +72,7 @@ export function PlaceSwitcher({ groups }) {
   const s = useStore();
   const place = s.place || { level: 'world' };
   const [picking, setPicking] = useState(null);   // nivån man byter på, eller null
+  const extras = usePlaceExtras();
   const out = place.level === 'world' ? null : zoomOut(place);
   const inner = zoomIn(place);
   const nextLevel = LEVELS[LEVELS.indexOf(place.level) + 1];
@@ -65,7 +87,7 @@ export function PlaceSwitcher({ groups }) {
         aria-label=${inner ? `Zooma in till ${placeLabel(inner)}` : nextLevel ? `Välj ${LEVEL_TITLE[nextLevel]}` : 'Zooma in'}
         title=${inner ? placeLabel(inner) : nextLevel ? `Välj ${LEVEL_TITLE[nextLevel]}` : ''}>›</button>
     </div>
-    ${picking && html`<${PlacePicker} level=${picking} place=${place} groups=${groups} onClose=${() => setPicking(null)} />`}`;
+    ${picking && html`<${PlacePicker} level=${picking} place=${place} groups=${groups} extras=${extras} onClose=${() => setPicking(null)} />`}`;
 }
 
 const SCALE = [['world', 'Världen'], ['country', 'Land'], ['region', 'Region'], ['city', 'Stad'], ['district', 'Stadsdel']];
@@ -73,15 +95,15 @@ const OTHER = { region: 'Andra regioner', city: 'Andra städer', district: 'Andr
 
 // Byt plats: överst en skala från hela världen till stadsdel (tryck på ett steg för att välja på den nivån),
 // under den ett sökfält och listan – först platserna i det man har valt (t.ex. städerna i Västra Götaland), sedan resten.
-function PlacePicker({ level: startLevel, place, groups, onClose }) {
+function PlacePicker({ level: startLevel, place, groups, extras = [], onClose }) {
   const [level, setLevel] = useState(startLevel);
   const [q, setQ] = useState('');
   const [found, setFound] = useState(null);   // stadsdel som slagits upp från ett postnummer
-  const opts = placeOptions(groups)[level];
+  const opts = placeOptions(groups, extras)[level];
   const parentKey = { country: null, region: 'country', city: 'region', district: 'city' }[level];
   const near = (o) => (parentKey && place[parentKey] && lc(o[parentKey]) === lc(place[parentKey]) ? 0 : 1);
   const names = useDistrictNames(level === 'district' ? opts.filter((o) => !near(o)).concat(opts.filter(near)).slice(0, 30) : []);
-  const label = (o) => (o.level === 'district' ? names[pcKey(o.postcode)] || fmtPostcode(o.postcode) : o[o.level]);
+  const label = (o) => (o.level === 'district' ? names[pcKey(o.postcode)] || o.district || fmtPostcode(o.postcode) : o[o.level]);
   const sub = (o) => (o.level === 'district' ? [names[pcKey(o.postcode)] && fmtPostcode(o.postcode), o.city] : [o.level === 'city' && o.region, o.level !== 'country' && o.country]).filter(Boolean).join(' · ');
   const needle = lc(q.trim());
   const rank = (o) => { const n = lc(label(o)); return n.startsWith(needle) || (o.level === 'district' && pcKey(o.postcode).startsWith(needle.replace(/\D/g, '') || 'x')) ? 0 : n.includes(needle) ? 1 : lc(sub(o)).includes(needle) ? 2 : 3; };
@@ -117,7 +139,7 @@ function PlacePicker({ level: startLevel, place, groups, onClose }) {
   const row = (o, showWhere) => html`<button class=${'sheet-item place-opt' + (isOn(o) ? ' on' : '')} onClick=${() => pick(o)}>
       <span class="place-opt-main">${label(o)}${showWhere ? sub(o) && html`<small class="muted">${sub(o)}</small>`
         : level === 'district' && names[pcKey(o.postcode)] && html`<small class="muted">${fmtPostcode(o.postcode)}</small>`}</span>
-      <small class="muted">${o.n} ${o.n === 1 ? 'grupp' : 'grupper'}</small></button>`;
+      <small class="muted place-what">${[o.home && 'Din plats', o.n && `${o.n} ${o.n === 1 ? 'grupp' : 'grupper'}`, o.ev && `${o.ev} evenemang`].filter(Boolean).join(' · ')}</small></button>`;
   const exact = list.some((o) => lc(label(o)) === needle);
   const free = q.trim() && level !== 'district' && !exact;
   return html`<${Sheet} onClose=${onClose}>
@@ -141,12 +163,12 @@ function PlacePicker({ level: startLevel, place, groups, onClose }) {
       <span class="place-opt-main">${found ? found.district || `Postnummer ${fmtPostcode(digits)}` : 'Hittar inte det postnumret'}<small class="muted">${found ? [fmtPostcode(digits), found.city].filter(Boolean).join(' · ') : ''}</small></span></button>`}
     ${parentName && html`<div class="sheet-label">I ${parentName}</div>`}
     ${nearList.map((o) => row(o, !parentName))}
-    ${parentName && !nearList.length && html`<p class="empty small">${needle ? 'Inget som matchar här.' : `Inga grupper i ${parentName} har angett det än.`}</p>`}
+    ${parentName && !nearList.length && html`<p class="empty small">${needle ? 'Inget som matchar här.' : `Inget i ${parentName} har angett det än. Skriv för att välja ändå.`}</p>`}
     ${farList.length > 0 && html`<div class="sheet-label">${OTHER[level]}</div>`}
     ${farList.map((o) => row(o, true))}
     ${free && html`<button class="sheet-item place-opt" onClick=${() => pick({ [level]: q.trim().replace(/^./, (m) => m.toUpperCase()) })}>
-      <span class="place-opt-main">Visa ”${q.trim()}”<small class="muted">Inga grupper där än</small></span></button>`}
-    ${!parentName && !list.length && !free && !(level === 'district' && digits.length === 5) && html`<p class="empty small">${needle ? 'Inget som matchar.' : 'Inga grupper har angett det än.'}</p>`}
+      <span class="place-opt-main">Visa ”${q.trim()}”<small class="muted">Inget där än – det som dyker upp visas här</small></span></button>`}
+    ${!parentName && !list.length && !free && !(level === 'district' && digits.length === 5) && html`<p class="empty small">${needle ? 'Inget som matchar.' : 'Inget har angett det än. Skriv för att välja ändå.'}</p>`}
   <//>`;
 }
 

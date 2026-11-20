@@ -205,7 +205,7 @@ export const api = {
     const me = db.session; q = q.trim().toLowerCase();
     return clone(db.groups.filter((g) => !q || [g.name, g.description, g.city, g.region, g.country].some((x) => (x || '').toLowerCase().includes(q)))
       .sort((a, b) => b.last_activity_at.localeCompare(a.last_activity_at))
-      .map((g) => ({ ...g, member_count: db.members.filter((m) => m.group_id === g.id).length, is_member: !!membership(g.id, me) })));
+      .map((g) => ({ ...g, member_count: db.members.filter((m) => m.group_id === g.id).length, member_ids: db.members.filter((m) => m.group_id === g.id).map((m) => m.user_id), is_member: !!membership(g.id, me) })));
   },
   async myGroups() {
     const me = needMe();

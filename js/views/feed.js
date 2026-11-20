@@ -3,7 +3,7 @@ import { html, useState, useEffect } from '../lib.js';
 import { api } from '../api/index.js';
 import { useStore, useAsync, go, attempt, refreshBadges } from '../store.js';
 import { Icon, Avatar, Count, Header, PostCard, Comments, Loading, ErrorBox, Sheet, GroupPicker, AddressPicker } from '../ui.js';
-import { PAYOUT_BANK_LIMIT, POST_TYPES, DEFAULT_FUNCTIONS, SPACE_COSTS, postType, placeLabel, inPlace, zoomOut, fmtKr } from '../util.js';
+import { PAYOUT_BANK_LIMIT, POST_TYPES, DEFAULT_FUNCTIONS, SPACE_COSTS, postType, placeLabel, inPlace, postPlace, zoomOut, fmtKr } from '../util.js';
 
 // Tips om att spara appen på hemskärmen. Instruktionen anpassas efter telefon och webbläsare,
 // eftersom knapparna ligger på olika ställen. Visas tills man stänger det eller har sparat appen.
@@ -81,7 +81,7 @@ export function Home({ tab: startTab }) {
   const fresh = (g) => Date.now() - new Date(g.last_activity_at) < 24 * 3600e3;
   const choose = (t) => { setTab(t); try { sessionStorage.setItem('tab', t); } catch {} };
 
-  const here = (posts.data || []).filter((p) => inPlace(p.group, place));
+  const here = (posts.data || []).filter((p) => inPlace(postPlace(p), place));
   const finance = here.filter((p) => postType(p) === 'finansiering');
   const spaces = here.filter((p) => postType(p) === 'lokal');
   const available = finance.reduce((sum, p) => sum + (p.finance?.open ? p.finance.remaining : 0), 0);

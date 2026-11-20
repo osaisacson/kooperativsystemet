@@ -167,7 +167,7 @@ export const api = {
   async listGroups(q = '') {
     let query = sb.from('groups').select('*, group_members(user_id)').order('last_activity_at', { ascending: false });
     if (q.trim()) query = query.or(`name.ilike.%${q.trim()}%,description.ilike.%${q.trim()}%,city.ilike.%${q.trim()}%,region.ilike.%${q.trim()}%,country.ilike.%${q.trim()}%`);
-    return ok(await query).map(({ group_members, ...g }) => ({ ...g, member_count: group_members.length, is_member: group_members.some((m) => m.user_id === meId) }));
+    return ok(await query).map(({ group_members, ...g }) => ({ ...g, member_count: group_members.length, member_ids: group_members.map((m) => m.user_id), is_member: group_members.some((m) => m.user_id === meId) }));
   },
   async myGroups() {
     const rows = ok(await sb.from('group_members').select('role, group:groups(id,name,avatar_url,city,region,country,postcode)').eq('user_id', needMe()));
