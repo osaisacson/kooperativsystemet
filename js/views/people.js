@@ -356,6 +356,6 @@ export function EditProfile({ section }) {
     <div class="list">${s.myGroups.map((g) => html`<div class="row" key=${g.id}>
       <a href=${'#/grupp/' + g.id}><${Avatar} src=${g.avatar_url} name=${g.name} size=${40} /></a>
       <a class="row-main" href=${'#/grupp/' + g.id}><strong>${g.name}</strong><small class="muted">${g.role === 'admin' ? 'Admin' : 'Medlem'}</small></a>
-      <button class="btn small" onClick=${() => leave(g)}>Lämna</button></div>`)}</div>`}
+      ${g.locked ? html`<small class="muted">Via Redaktionen</small>` : html`<button class="btn small" onClick=${() => leave(g)}>Lämna</button>`}</div>`)}</div>`}
   </div>`;
 }

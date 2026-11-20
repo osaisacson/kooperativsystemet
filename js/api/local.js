@@ -254,6 +254,7 @@ export const api = {
   },
   async joinGroup(id) {
     const me = needMe();
+    if (db.groups.find((g) => g.id === id)?.locked) throw new Error('Gruppen är låst.');
     if (!membership(id, me)) db.members.push({ group_id: id, user_id: me, role: 'member', joined_at: now() });
     persist();
   },
@@ -294,13 +295,13 @@ export const api = {
 
   // ---- Inlägg ----
   async listCategories() { return sortCategories(db.categories.map((c) => c.name)); },
-  async listPosts({ kind = null, tag = null, groupId = null, authorId = null, q = '', feed = false } = {}) {
+  async listPosts({ kind = null, tag = null, groupId = null, authorId = null, q = '', feed = false, before = null, limit = 200 } = {}) {
     q = q.trim().toLowerCase();
     let ps = db.posts.filter((p) =>
       (!kind || (p.kind || 'vanlig') === kind) && (!tag || p.categories.includes(tag)) &&
       (!groupId || p.group_id === groupId) && (!authorId || p.author_id === authorId) &&
       (!q || p.caption.toLowerCase().includes(q) || p.slides.some((s) => s.text.toLowerCase().includes(q))));
-    ps = ps.sort((a, b) => b.created_at.localeCompare(a.created_at)).map(shapePost);
+    ps = ps.filter((p) => !before || p.created_at < before).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit).map(shapePost);
     return feed ? ps.filter(visibleInFeed) : ps;
   },
   async getPost(id) {

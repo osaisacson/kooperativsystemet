@@ -474,6 +474,7 @@ export function PostGrid({ posts, showAuthor = false, empty = 'Inga inlägg än.
 // Gå med i en grupp. Att lämna en grupp gör man under Redigera profil.
 export function JoinButton({ group, onChange }) {
   if (state.memberOf.has(group.id)) return html`<span class="member-label">Med ✓</span>`;
+  if (group.locked) return html`<span class="member-label" title="Medlemmarna är Redaktionen">Låst</span>`;
   async function join(e) {
     e.preventDefault(); e.stopPropagation();
     if (await attempt(() => api.joinGroup(group.id), `Du är med i ${group.name}`)) { await refreshMe(); onChange?.(); }

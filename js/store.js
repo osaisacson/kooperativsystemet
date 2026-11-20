@@ -77,7 +77,8 @@ export async function refreshMe() {
   if (!me) return setState({ me: null, myGroups: [], memberOf: new Set(), adminOf: new Set() });
   const myGroups = await api.myGroups();
   const isNew = Date.now() - new Date(me.created_at) < 10 * 60e3;
-  if (isNew && !myGroups.length && (location.hash === '' || location.hash === '#/')) go('/valkommen');
+  const skipped = (() => { try { return !!localStorage.getItem('valkommen-skippad'); } catch { return false; } })();
+  if (isNew && !skipped && !myGroups.length && (location.hash === '' || location.hash === '#/')) go('/valkommen');
   // Den plats man angett som sin startar appen på – första gången man loggar in på en enhet, och när man ändrat den.
   const home = placeFromHome(me.home);
   let homeFor = null; try { homeFor = localStorage.getItem('place-home'); } catch { /* ok */ }

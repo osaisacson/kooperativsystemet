@@ -837,3 +837,34 @@ end $$;
 
 -- Lägg till den första i Redaktionen för hand, t.ex.:
 -- insert into public.editors (user_id) select id from public.profiles where name = 'Ditt Namn';
+
+-- ---------- Låsta grupper (014) ----------
+-- ---------- Låsta grupper ----------
+-- En låst grupp går inte att gå med i själv. Gruppen Omställningsplatser är låst och dess medlemmar är Redaktionen.
+alter table public.groups add column if not exists locked boolean not null default false;
+update public.groups set locked = true where name = 'Omställningsplatser';
+
+drop policy if exists "öppet att gå med" on public.group_members;
+create policy "öppet att gå med" on public.group_members for insert to authenticated
+  with check (user_id = auth.uid() and role = 'member'
+    and not exists (select 1 from public.groups g where g.id = group_id and g.locked));
+
+-- Medlemmarna i den låsta gruppen följer Redaktionen: läggs någon till eller tas bort där, följer gruppen med.
+create or replace function public.sync_editor_group() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    insert into group_members (group_id, user_id, role)
+    select g.id, new.user_id, 'admin' from groups g where g.locked and g.name = 'Omställningsplatser'
+    on conflict (group_id, user_id) do update set role = 'admin';
+    return new;
+  else
+    delete from group_members gm using groups g
+    where gm.group_id = g.id and g.locked and g.name = 'Omställningsplatser' and gm.user_id = old.user_id;
+    return old;
+  end if;
+end $$;
+drop trigger if exists editors_sync_group on public.editors;
+create trigger editors_sync_group after insert or delete on public.editors
+  for each row execute function public.sync_editor_group();
+

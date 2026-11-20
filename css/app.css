@@ -756,3 +756,5 @@ html, body { overscroll-behavior-y: contain; }
 .ptr-icon.ready { transform: rotate(180deg); color: var(--accent); }
 .ptr.spin .ptr-icon { color: var(--accent); animation: ptr-spin .8s linear infinite; }
 @keyframes ptr-spin { to { transform: rotate(360deg); } }
+.skip-row { width: 100%; text-align: left; }
+.load-more { min-height: 40px; padding: 12px; text-align: center; font-size: 13px; color: var(--muted); }

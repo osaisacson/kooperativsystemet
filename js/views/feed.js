@@ -1,9 +1,9 @@
 // Flödet, enskilt inlägg och skapa/redigera inlägg.
-import { html, useState, useEffect } from '../lib.js';
+import { html, useState, useEffect, useRef } from '../lib.js';
 import { api } from '../api/index.js';
 import { useStore, useAsync, go, attempt, refreshBadges } from '../store.js';
 import { Icon, Avatar, Count, Header, PostCard, Comments, Loading, ErrorBox, Sheet, GroupPicker, AddressPicker } from '../ui.js';
-import { PAYOUT_BANK_LIMIT, POST_TYPES, DEFAULT_FUNCTIONS, SPACE_COSTS, postType, placeLabel, inPlace, postPlace, zoomOut, fmtKr } from '../util.js';
+import { PAYOUT_BANK_LIMIT, POST_TYPES, DEFAULT_FUNCTIONS, SPACE_COSTS, postType, placeLabel, inPlace, postPlace, zoomOut, fmtKr, visibleInFeed } from '../util.js';
 
 // Tips om att spara appen på hemskärmen. Instruktionen anpassas efter telefon och webbläsare,
 // eftersom knapparna ligger på olika ställen. Visas tills man stänger det eller har sparat appen.
@@ -66,6 +66,45 @@ export { PlaceSwitcher } from './place.js';
 import { PlaceSwitcher } from './place.js';
 import { EventsList } from './calendar.js';
 
+// Flödet hämtas 30 inlägg i taget; nästa omgång hämtas när man närmar sig slutet (eller när den valda
+// platsen eller fliken har för lite att visa), så att appen håller farten även med väldigt många inlägg.
+const PAGE = 30;
+function usePagedPosts() {
+  const [st, setSt] = useState({ data: null, loading: true, error: null, done: false });
+  const ref = useRef(st); ref.current = st;
+  const busy = useRef(false);
+  async function load(reset) {
+    if (busy.current) return;
+    busy.current = true;
+    setSt((x) => ({ ...x, loading: true }));
+    try {
+      const cur = reset ? [] : ref.current.data || [];
+      // Vid omladdning hämtas lika många som redan visas, så att man inte tappar sin plats.
+      const limit = reset ? Math.max(PAGE, (ref.current.data || []).length) : PAGE;
+      const page = await api.listPosts({ before: cur.length ? cur[cur.length - 1].created_at : null, limit });
+      setSt({ data: [...cur, ...page], loading: false, error: null, done: page.length < limit });
+    } catch (error) { setSt((x) => ({ ...x, loading: false, error })); }
+    busy.current = false;
+  }
+  useEffect(() => { load(true); }, []);
+  return { ...st, data: st.data && st.data.filter(visibleInFeed), more: () => !ref.current.done && load(false), reload: () => load(true) };
+}
+
+// Säger till när slutet av listan syns, så att fler kan hämtas.
+function LoadMore({ posts, short }) {
+  const el = useRef();
+  useEffect(() => {
+    if (!el.current) return;
+    const io = new IntersectionObserver(([e]) => e.isIntersecting && posts.more(), { rootMargin: '600px' });
+    io.observe(el.current);
+    return () => io.disconnect();
+  }, [posts.data?.length, posts.done]);
+  // Har den valda platsen eller fliken för lite att visa hämtas mer direkt.
+  useEffect(() => { if (short && !posts.done && !posts.loading) posts.more(); }, [short, posts.done, posts.loading, posts.data?.length]);
+  if (posts.done) return null;
+  return html`<div ref=${el} class="load-more">${posts.loading ? 'Hämtar fler…' : ''}</div>`;
+}
+
 const TABS = [['flode', 'Flöde'], ['finansiering', 'Finansiering'], ['lokal', 'Lokaler'], ['evenemang', 'Events'], ['minne', 'Minne']];
 
 export function Home({ tab: startTab }) {
@@ -76,7 +115,7 @@ export function Home({ tab: startTab }) {
   const [memQ, setMemQ] = useState('');    // Minne: sökfält för ämnen
   const [memTags, setMemTags] = useState([]);
   const groups = useAsync(() => api.listGroups(), []);
-  const posts = useAsync(() => api.listPosts({ feed: true }), []);
+  const posts = usePagedPosts();
   const place = s.place || { level: 'world' };
   const fresh = (g) => Date.now() - new Date(g.last_activity_at) < 24 * 3600e3;
   const choose = (t) => { setTab(t); try { sessionStorage.setItem('tab', t); } catch {} };
@@ -152,9 +191,11 @@ export function Home({ tab: startTab }) {
     ${tab === 'evenemang' ? html`<${EventsList} place=${place} empty=${html`<p class="empty">Inga kommande evenemang i ${where}.
           ${place.level !== 'world' && html`<br /><span class="small">Tryck på <b>‹</b> högst upp för att zooma ut till ${placeLabel(zoomOut(place))}.</span>`}</p>`} />`
       : posts.loading && !posts.data ? html`<${Loading} />` : posts.error ? html`<${ErrorBox} error=${posts.error} />`
+      : shown.length === 0 && !posts.done ? html`<p class="empty">Letar efter inlägg…</p>`
       : shown.length === 0 ? html`<p class="empty">${{ flode: 'Inga inlägg', finansiering: 'Ingen finansiering att söka', lokal: 'Inga lokaler', minne: 'Inget sparat i långtidsminnet' }[tab]} i ${where}${(fn || cost || memTags.length || memQ) ? ' som matchar' : ' än'}.
           ${place.level !== 'world' && html`<br /><span class="small">Tryck på <b>‹</b> högst upp för att zooma ut till ${placeLabel(zoomOut(place))}.</span>`}</p>`
       : html`<div class="feed">${shown.map((p) => html`<${PostCard} key=${p.id} post=${p} onChange=${posts.reload} />`)}</div>`}
+    ${tab !== 'evenemang' && posts.data && html`<${LoadMore} posts=${posts} short=${shown.length < 12} />`}
   </div>`;
 }
 

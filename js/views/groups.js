@@ -68,7 +68,8 @@ export function GroupView({ id }) {
     </div>`}
 
     <div class="members-head">
-      ${!member && html`<button class="btn primary small" onClick=${join}>Gå med i gruppen</button>`}
+      ${!member && !grp.locked && html`<button class="btn primary small" onClick=${join}>Gå med i gruppen</button>`}
+      ${grp.locked && html`<span class="muted small">Låst grupp – medlemmarna är <a href="#/hjalp">Redaktionen</a></span>`}
       <button class="members-toggle" aria-expanded=${showMembers} onClick=${() => setShowMembers((x) => !x)}>
         Medlemmar <span class="muted">(${grp.members.length})</span> <span class="chev">${showMembers ? '▾' : '▸'}</span></button>
     </div>
@@ -162,7 +163,7 @@ export function GroupSettings({ id }) {
     </form>
 
     <div class="label pad-x">Medlemmar och admins</div>
-    <div class="list">
+    ${grp.locked ? html`<p class="hint pad">Gruppen är låst: medlemmarna är Redaktionen. Lägg till eller ta bort någon via personens profil (Lägg till i / Ta bort ur Redaktionen).</p>` : html`<div class="list">
       ${grp.members.map((m) => {
         const me = m.user.id === s.me.id;
         return html`<div class="row" key=${m.user.id}>
@@ -175,7 +176,7 @@ export function GroupSettings({ id }) {
             ${!me && html`<button class="btn small danger" onClick=${() => confirm(`Ta bort ${m.user.name} ur gruppen?`) && act(() => api.removeMember(id, m.user.id), 'Borttagen ur gruppen')}>Ta bort</button>`}
           </span></div>`;
       })}
-    </div>
+    </div>`}
     <div class="pad danger-zone">
       <button class="btn danger block" onClick=${async () => {
         if (!confirm(`Ta bort ${grp.name}? Gruppens alla inlägg, kommentarer och höjdpunkter tas också bort. Det går inte att ångra.`)) return;
@@ -233,6 +234,7 @@ function HomeStep({ groups }) {
 export function Welcome() {
   const s = useStore();
   const groups = useAsync(() => api.listGroups(), []);
+  const skip = () => { try { localStorage.setItem('valkommen-skippad', '1'); } catch { /* ok */ } go('/'); };
   return html`<div class="page">
     <div class="pad welcome">
       <h1>Välkommen, ${s.me.name.split(' ')[0]}!</h1>
@@ -241,8 +243,10 @@ export function Welcome() {
       <a class="btn block" href="#/ny-grupp?next=/valkommen">+ Skapa en ny grupp</a>
     </div>
     <div class="list">
-      ${groups.loading && !groups.data ? html`<${Loading} />` : (groups.data || []).map((g) => html`<${GroupRow} key=${g.id} group=${g} onChange=${groups.reload} />`)}
+      ${!s.memberOf.size && html`<button class="row skip-row" onClick=${skip}><span class="avatar plus">→</span>
+        <span class="row-main"><strong>Skippa för nu</strong><small class="muted">Gå med i grupper senare via + på din profil</small></span></button>`}
+      ${groups.loading && !groups.data ? html`<${Loading} />` : (groups.data || []).filter((g) => !g.locked).map((g) => html`<${GroupRow} key=${g.id} group=${g} onChange=${groups.reload} />`)}
     </div>
-    <div class="pad"><button class=${'btn block ' + (s.memberOf.size ? 'primary' : '')} onClick=${() => go('/')}>${s.memberOf.size ? 'Klar – till flödet' : 'Hoppa över så länge'}</button></div>
+    ${s.memberOf.size > 0 && html`<div class="pad"><button class="btn block primary" onClick=${skip}>Klar – till flödet</button></div>`}
   </div>`;
 }

@@ -170,7 +170,7 @@ export const api = {
     return ok(await query).map(({ group_members, ...g }) => ({ ...g, member_count: group_members.length, member_ids: group_members.map((m) => m.user_id), is_member: group_members.some((m) => m.user_id === meId) }));
   },
   async myGroups() {
-    const rows = ok(await sb.from('group_members').select('role, group:groups(id,name,avatar_url,city,region,country,postcode)').eq('user_id', needMe()));
+    const rows = ok(await sb.from('group_members').select('role, group:groups(id,name,avatar_url,city,region,country,postcode,locked)').eq('user_id', needMe()));
     return rows.map((r) => ({ ...r.group, role: r.role })).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
   },
   async getGroup(id) {
@@ -216,8 +216,9 @@ export const api = {
 
   // ---- Inlägg ----
   async listCategories() { return sortCategories(ok(await sb.from('categories').select('name')).map((c) => c.name)); },
-  async listPosts({ kind = null, tag = null, groupId = null, authorId = null, q = '', feed = false } = {}) {
-    let query = sb.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(200);
+  async listPosts({ kind = null, tag = null, groupId = null, authorId = null, q = '', feed = false, before = null, limit = 200 } = {}) {
+    let query = sb.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(limit);
+    if (before) query = query.lt('created_at', before);
     if (kind) query = query.eq('kind', kind);
     if (tag) query = query.contains('categories', [tag]);
     if (groupId) query = query.eq('group_id', groupId);
