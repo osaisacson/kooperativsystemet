@@ -525,6 +525,7 @@ a.todo small { display: block; }
   .map-split .map-list { overflow-y: auto; border-left: 1px solid var(--line); }
 
   .composer, .comment-form { bottom: 0; }
+  main[data-page="hem"] .topbar .map-btn, main[data-page="hem"] .topbar .topbar-side.right { visibility: hidden; }   /* finns i sidomenyn */
 }
 @media (min-width: 1180px) {
   :root { --rail: 232px; }
@@ -538,7 +539,7 @@ a.todo small { display: block; }
   /* Inlägg: bild till vänster, kommentarer till höger */
   main[data-page="post"] { max-width: 1120px; }
   .post-page { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); align-items: start; }
-  .post-main { position: sticky; top: 52px; border-right: 1px solid var(--line); }
+  .post-main { border-right: 1px solid var(--line); }
   .post-main .post { border-bottom: 0; }
   .post-side { min-height: calc(100dvh - 52px); display: flex; flex-direction: column; }
   .post-side .comments-section { flex: 1; }
