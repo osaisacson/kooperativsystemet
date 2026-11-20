@@ -97,7 +97,10 @@ export function PlaceSwitcher({ groups }) {
     && (o.country || '').toLowerCase() === (place.country || '').toLowerCase();
   const where = (o) => [o.level === 'city' && o.region, o.level !== 'country' && o.country].filter(Boolean).join(', ');
   const needle = q.trim().toLowerCase();
-  const list = opts && level !== 'world' ? opts[level].filter((o) => !needle || placeLabel(o).toLowerCase().includes(needle) || where(o).toLowerCase().includes(needle)) : [];
+  // Sök: namn som börjar med texten först, sedan namn som innehåller den, sist träffar på region eller land
+  const rank = (o) => { const n = placeLabel(o).toLowerCase(); return n.startsWith(needle) ? 0 : n.includes(needle) ? 1 : where(o).toLowerCase().includes(needle) ? 2 : 3; };
+  const list = !opts || level === 'world' ? [] : !needle ? opts[level]
+    : opts[level].map((o) => [rank(o), o]).filter(([r]) => r < 3).sort((a, b) => a[0] - b[0]).map(([, o]) => o);
 
   return html`<button class="place-btn" onClick=${show} aria-label=${`Visar ${placeLabel(place)}. Byt plats`}>
       <span class="place-name">${placeLabel(place)}<span class="chev" aria-hidden="true">▾</span></span>
