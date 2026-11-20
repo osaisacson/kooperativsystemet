@@ -2,7 +2,8 @@
 -- Användarkonton i auth.users ligger kvar; ta bort dem under Authentication → Users om du vill.
 drop trigger if exists on_auth_user_created on auth.users;
 drop table if exists public.email_outbox, public.messages, public.notifications, public.payouts, public.comments,
-  public.post_slides, public.posts, public.categories, public.highlights, public.group_members, public.groups, public.profiles cascade;
+  public.post_slides, public.posts, public.categories, public.highlights, public.group_members, public.groups, public.home_places, public.profiles cascade;
+drop function if exists public.group_places();
 drop function if exists public.is_member(uuid), public.is_admin(uuid), public.handle_new_user(), public.on_group_created(),
   public.on_post_created(), public.on_comment_created(), public.ensure_group_admin(), public.on_admin_granted(), public.touch(),
   public.apply_for_funding(uuid, text, numeric, text), public.decide_application(uuid, text), public.mark_paid(uuid),

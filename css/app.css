@@ -573,3 +573,29 @@ a.todo small { display: block; }
 .place-opt-main { display: flex; flex-direction: column; min-width: 0; }
 .place-opt-main small { font-weight: 400; font-size: 12px; }
 .place-opt { align-items: center; gap: 10px; }
+
+/* ---- Platsväljaren ‹ Göteborg › ---- */
+.placebar { display: flex; align-items: center; min-width: 0; flex: 0 1 auto; gap: 0; }
+.map-page .placebar { flex: 1; }
+.placebar .zoom { flex: none; width: 34px; height: 44px; display: grid; place-items: center; font-size: 30px; line-height: 1; font-weight: 300; color: var(--accent); border-radius: 10px; padding-bottom: 4px; }
+.placebar .zoom:disabled { color: var(--line); }
+.placebar .zoom:not(:disabled):active { background: var(--accent-soft); }
+.placebar .place-btn { flex: 0 1 auto; align-items: center; text-align: center; padding: 2px 2px; min-width: 0; }
+.placebar .place-name { justify-content: center; }
+.place-ctx { font-size: 11px; color: var(--muted); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick-head { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: 12px 0 8px; }
+.pick-title { font-size: 15px; font-weight: 700; text-align: center; }
+.home-place .typeahead { margin-top: 4px; }
+.ta-item { justify-content: space-between; }
+.ta-name { min-width: 0; }
+.ta-new { color: var(--accent); }
+.pc-state { display: block; margin-top: 4px; color: var(--muted); font-weight: 400; }
+.pc-state.ok { color: var(--accent); font-weight: 600; }
+.start-level { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 10px; background: var(--bg-soft); }
+.seg { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.seg button { padding: 9px 2px; font-size: 13.5px; font-weight: 600; border-left: 1px solid var(--line); }
+.seg button:first-child { border-left: 0; }
+.seg button.on { background: var(--accent); color: #fff; }
+.seg button:disabled { color: var(--muted); opacity: .45; }
+.home-nudge { display: block; margin: 8px 12px; color: inherit; text-decoration: none; }
+.welcome-place { margin: 12px 0; }

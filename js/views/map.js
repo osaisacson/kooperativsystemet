@@ -5,7 +5,7 @@ import { api } from '../api/index.js';
 import { useStore, useAsync, go, goBack } from '../store.js';
 import { Icon, Avatar, Loading } from '../ui.js';
 import { inPlace, placeLabel } from '../util.js';
-import { PlaceSwitcher } from './feed.js';
+import { PlaceSwitcher } from './place.js';
 
 let leaflet;
 function loadLeaflet() {
@@ -24,7 +24,7 @@ function loadLeaflet() {
   return leaflet;
 }
 
-const ZOOM = { city: 12, region: 8, country: 5, world: 2 };
+const ZOOM = { district: 13, city: 12, region: 8, country: 5, world: 2 };
 const where = (g) => (g.address ? (g.city && !g.address.toLowerCase().includes(g.city.toLowerCase()) ? `${g.address}, ${g.city}` : g.address) : g.city || '');
 const esc = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 

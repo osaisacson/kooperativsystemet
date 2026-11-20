@@ -6,10 +6,18 @@ export const postType = (p) => p.kind || (p.fin_total != null ? 'finansiering' :
 export const DEFAULT_FUNCTIONS = ['Verkstad', 'Kök', 'Möteslokal', 'Förråd', 'Odling', 'Ateljé', 'Övernattning'];
 export const SPACE_COSTS = { gratis: 'Gratis', gentjanst: 'Mot gentjänst', kostar: 'Kostar' };
 
-// Plats: flödet kan visas för en stad, en region, ett land eller hela världen.
-export const PLACE_LEVELS = { city: 'stad', region: 'region', country: 'land', world: '' };
+// Plats: flödet kan visas för en stadsdel, en stad, en region, ett land eller hela världen.
+// En stadsdel anges med postnummer; grupper räknas till samma stadsdel om postnumrets tre första siffror är lika.
+export const LEVELS = ['world', 'country', 'region', 'city', 'district'];
+export const PLACE_LEVELS = { district: 'stadsdel', city: 'stad', region: 'region', country: 'land', world: '' };
+const LEVEL_KEY = { country: 'country', region: 'region', city: 'city', district: 'postcode' };
+export const pc3 = (p) => String(p || '').replace(/\D/g, '').slice(0, 3);
+export const fmtPostcode = (p) => { const d = String(p || '').replace(/\D/g, ''); return d.length === 5 ? `${d.slice(0, 3)} ${d.slice(3)}` : String(p || '').trim(); };
+// Har platsen ett värde på den här nivån? (Hela världen har alltid det.)
+export const hasLevel = (place, level) => level === 'world' || !!(place && place[LEVEL_KEY[level]]);
 export function placeLabel(place) {
   if (!place || place.level === 'world') return 'Hela världen';
+  if (place.level === 'district') return place.district || (place.postcode ? `Postnummer ${pc3(place.postcode)}` : 'Stadsdel');
   return place[place.level] || 'Hela världen';
 }
 export function inPlace(group, place) {
@@ -18,7 +26,52 @@ export function inPlace(group, place) {
   const same = (k) => (group[k] || '').toLowerCase() === (place[k] || '').toLowerCase();
   if (place.level === 'country') return same('country');
   if (place.level === 'region') return same('country') && same('region');
-  return same('country') && same('city');
+  if (place.level === 'city') return same('country') && same('city');
+  return same('country') && !!pc3(group.postcode) && pc3(group.postcode) === pc3(place.postcode);
+}
+// Ett steg utåt (stadsdel → stad → region → land → hela världen). Nivåer som saknas hoppas över.
+// De inre fälten sparas, så att man kan zooma in igen till samma ställe.
+export function zoomOut(place) {
+  let i = LEVELS.indexOf(place?.level || 'world') - 1;
+  while (i > 0 && !hasLevel(place, LEVELS[i])) i--;
+  return i < 0 ? place : { ...place, level: LEVELS[Math.max(0, i)] };
+}
+// Ett steg inåt, om platsen redan har ett värde där. Annars null (då får man välja).
+export function zoomIn(place) {
+  const i = LEVELS.indexOf(place?.level || 'world');
+  for (let j = i + 1; j < LEVELS.length; j++) {
+    if (hasLevel(place, LEVELS[j])) return { ...place, level: LEVELS[j] };
+    if (LEVELS[j] !== 'region') return null;   // region kan saknas för en stad, de andra inte
+  }
+  return null;
+}
+// Hemplatsen som användaren angav (land, region, stad, postnummer och vilken nivå appen startar på).
+export function placeFromHome(h) {
+  if (!h?.country) return null;
+  let level = LEVELS.includes(h.level) ? h.level : 'city';
+  while (level !== 'world' && !hasLevel(h, level)) level = LEVELS[LEVELS.indexOf(level) - 1];
+  return { level, country: h.country, region: h.region || null, city: h.city || null, postcode: h.postcode || null, district: h.district || null };
+}
+export const SE_REGIONS = ['Blekinge län', 'Dalarnas län', 'Gotlands län', 'Gävleborgs län', 'Hallands län', 'Jämtlands län', 'Jönköpings län',
+  'Kalmar län', 'Kronobergs län', 'Norrbottens län', 'Skåne län', 'Stockholms län', 'Södermanlands län', 'Uppsala län', 'Värmlands län',
+  'Västerbottens län', 'Västernorrlands län', 'Västmanlands län', 'Västra Götalands län', 'Örebro län', 'Östergötlands län'];
+// Namnet på stadsdelen för ett postnummer, från OpenStreetMap (Photon). Sparas i webbläsaren.
+const pcCache = (() => { try { return JSON.parse(localStorage.getItem('pc-names')) || {}; } catch { return {}; } })();
+export async function lookupPostcode(postcode, city = '') {
+  const d = String(postcode || '').replace(/\D/g, '');
+  if (d.length < 5) return null;
+  const key = `${d}|${city}`;
+  if (key in pcCache) return pcCache[key];
+  let hit = null;
+  try {
+    const r = await fetch(`https://photon.komoot.io/api/?limit=5&lang=default&q=${encodeURIComponent(fmtPostcode(d) + ' ' + city)}`).then((r) => r.json());
+    const f = (r.features || []).find((x) => x.properties.osm_value === 'postcode' && x.properties.name?.replace(/\D/g, '') === d)
+      || (r.features || []).find((x) => x.properties.postcode?.replace(/\D/g, '') === d);
+    if (f) { const p = f.properties; hit = { district: p.district || p.locality || null, city: p.city || p.town || null, region: p.county || p.state || null, country: p.country || null }; }
+  } catch { return null; }   // nätverksfel sparas inte
+  pcCache[key] = hit;
+  try { localStorage.setItem('pc-names', JSON.stringify(pcCache)); } catch { /* ok */ }
+  return hit;
 }
 export const countryNames = () => {
   try {

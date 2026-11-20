@@ -1,6 +1,7 @@
 // Liten global state: inloggad användare, mina grupper och siffror på ikonerna.
 import { useState, useEffect } from './lib.js';
 import { api } from './api/index.js';
+import { placeFromHome } from './util.js';
 
 const listeners = new Set();
 // Vald plats för flödet (stad, region, land eller hela världen). Sparas i webbläsaren.
@@ -77,7 +78,12 @@ export async function refreshMe() {
   const myGroups = await api.myGroups();
   const isNew = Date.now() - new Date(me.created_at) < 10 * 60e3;
   if (isNew && !myGroups.length && (location.hash === '' || location.hash === '#/')) go('/valkommen');
-  if (!state.place) setState({ place: defaultPlace(myGroups) });
+  // Den plats man angett som sin startar appen på – första gången man loggar in på en enhet, och när man ändrat den.
+  const home = placeFromHome(me.home);
+  let homeFor = null; try { homeFor = localStorage.getItem('place-home'); } catch { /* ok */ }
+  const homeKey = home ? me.id + JSON.stringify(home) : null;
+  if (home && homeFor !== homeKey) { setPlace(home); try { localStorage.setItem('place-home', homeKey); } catch { /* ok */ } }
+  else if (!state.place) setState({ place: defaultPlace(myGroups) });
   setState({
     me, myGroups,
     memberOf: new Set(myGroups.map((g) => g.id)),

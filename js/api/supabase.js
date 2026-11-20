@@ -42,7 +42,7 @@ async function upload(file, max = 1280) {
 }
 
 const PROFILE = 'id,name,avatar_url';
-const POST_SELECT = `*, author:profiles!posts_author_id_fkey(${PROFILE}), group:groups(id,name,avatar_url,city,region,country), slides:post_slides(id,position,image_url,text), comments(id,applied_amount,status,body,created_at,parent_id,author:profiles(id,name),group:groups(id,name)), memory_votes(user_id), event_rsvps(user_id,status)`;
+const POST_SELECT = `*, author:profiles!posts_author_id_fkey(${PROFILE}), group:groups(id,name,avatar_url,city,region,country,postcode), slides:post_slides(id,position,image_url,text), comments(id,applied_amount,status,body,created_at,parent_id,author:profiles(id,name),group:groups(id,name)), memory_votes(user_id), event_rsvps(user_id,status)`;
 
 function shapePost(p) {
   const cs = p.comments || [];
@@ -60,6 +60,8 @@ function shapePost(p) {
 }
 const place = ({ country, region, city }) => ({ country: (country || '').trim() || null, region: (region || '').trim() || null, city: (city || '').trim() || null });
 // Plats + adress + kartposition (slås upp automatiskt).
+const cleanHome = (h) => ({ country: (h.country || '').trim() || null, region: (h.region || '').trim() || null, city: (h.city || '').trim() || null,
+  postcode: (h.postcode || '').trim() || null, district: h.district || null, level: ['country', 'region', 'city', 'district'].includes(h.level) ? h.level : 'city' });
 async function located({ country, region, city, address, postcode, lat, lng }) {
   const p = { ...place({ country, region, city }), address: (address || '').trim() || null, postcode: (postcode || '').trim() || null };
   const pos = lat != null && lng != null ? { lat, lng } : await geocode(p);   // vald adress har redan en position
@@ -96,11 +98,16 @@ export const api = {
     const { data: { session } } = await sb.auth.getSession();
     meId = session?.user?.id ?? null;
     if (!meId) return null;
-    return ok(await sb.from('profiles').select('*').eq('id', meId).maybeSingle());
+    const [me, home] = await Promise.all([
+      sb.from('profiles').select('*').eq('id', meId).maybeSingle().then(ok),
+      sb.from('home_places').select('*').eq('user_id', meId).maybeSingle().then((r) => r.data ?? null, () => null),
+    ]);
+    return me && { ...me, home };
   },
-  async signUp({ email, password, name, nickname, avatarFile }) {
+  async signUp({ email, password, name, nickname, avatarFile, home }) {
     if (!name.trim()) throw new Error('Skriv ditt namn.');
-    const data = ok(await sb.auth.signUp({ email: email.trim(), password, options: { data: { name: name.trim(), nickname: (nickname || '').trim() } } }));
+    // Platsen följer med kontot och sparas av databasen när kontot skapas (även om e-posten måste bekräftas först).
+    const data = ok(await sb.auth.signUp({ email: email.trim(), password, options: { data: { name: name.trim(), nickname: (nickname || '').trim(), home: home ? cleanHome(home) : null } } }));
     if (!data.session) return { needsConfirmation: true };
     meId = data.user.id;
     if (avatarFile) await api.updateProfile({ avatarFile });
@@ -123,7 +130,8 @@ export const api = {
     recovering = false;
   },
   async touch() { if (meId) await sb.rpc('touch'); },
-  async updateProfile({ name, nickname, avatarFile }) {
+  async updateProfile({ name, nickname, avatarFile, home }) {
+    if (home) ok(await sb.from('home_places').upsert({ user_id: needMe(), ...cleanHome(home), updated_at: new Date().toISOString() }));
     const patch = {};
     if (name?.trim()) patch.name = name.trim();
     if (nickname !== undefined) patch.nickname = nickname.trim() || null;
@@ -144,13 +152,14 @@ export const api = {
   },
 
   // ---- Grupper ----
+  async listPlaces() { return ok(await sb.rpc('group_places')); },
   async listGroups(q = '') {
     let query = sb.from('groups').select('*, group_members(user_id)').order('last_activity_at', { ascending: false });
     if (q.trim()) query = query.or(`name.ilike.%${q.trim()}%,description.ilike.%${q.trim()}%,city.ilike.%${q.trim()}%,region.ilike.%${q.trim()}%,country.ilike.%${q.trim()}%`);
     return ok(await query).map(({ group_members, ...g }) => ({ ...g, member_count: group_members.length, is_member: group_members.some((m) => m.user_id === meId) }));
   },
   async myGroups() {
-    const rows = ok(await sb.from('group_members').select('role, group:groups(id,name,avatar_url,city,region,country)').eq('user_id', needMe()));
+    const rows = ok(await sb.from('group_members').select('role, group:groups(id,name,avatar_url,city,region,country,postcode)').eq('user_id', needMe()));
     return rows.map((r) => ({ ...r.group, role: r.role })).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
   },
   async getGroup(id) {

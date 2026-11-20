@@ -18,7 +18,7 @@
 <main>
   <p><a href="./">← Till Kooperativsystemet</a></p>
   <h1>Integritet</h1>
-  <p class="muted">Senast uppdaterad 19 november 2026 (karta tillagd)</p>
+  <p class="muted">Senast uppdaterad 20 november 2026 (din plats tillagd)</p>
 
   <p>Kooperativsystemet är ett ideellt, öppet verktyg för grupper som gör småskaliga omställningar av vatten, avfall, energi och ekonomi.
     Här står kort vilka uppgifter vi sparar och varför.</p>
@@ -28,6 +28,7 @@
     <li><strong>Konto:</strong> e-postadress, namn, valfritt smeknamn och profilbild. Loggar du in med Google får vi ditt namn, din e-postadress och din profilbild därifrån.</li>
     <li><strong>Det du lägger upp:</strong> inlägg, bilder, kommentarer, grupper du är med i och meddelanden du skickar.</li>
     <li><strong>Finansiering:</strong> söker du pengar sparas belopp och det swishnummer eller bankkonto du anger. Det syns bara för dig och den som delar ut pengarna.</li>
+    <li><strong>Var du håller till:</strong> land, region, stad och postnummer som du anger. Det syns bara för dig och används för att appen ska starta med det som händer nära dig.</li>
     <li><strong>Senast aktiv:</strong> när du senast använde appen, så att grupper utan aktiva admins kan få en ny.</li>
   </ul>
 
@@ -40,7 +41,7 @@
 
   <h2>Var uppgifterna finns</h2>
   <p>Allt lagras hos <a href="https://supabase.com">Supabase</a> på servrar inom EU. Själva appen ligger på GitHub Pages.
-    När en grupp anger adress slås den upp hos OpenStreetMap (Nominatim) för att gruppen ska kunna visas på kartan, och kartbilderna hämtas från OpenStreetMap.
+    När en grupp anger adress slås den upp hos OpenStreetMap (Nominatim), och när du anger postnummer slås stadsdelens namn upp hos Photon (som bygger på OpenStreetMap). Bara postnumret skickas för att gruppen ska kunna visas på kartan, och kartbilderna hämtas från OpenStreetMap.
     Inlägg, kommentarer, grupper och profiler syns för alla som är inloggade. Meddelanden syns bara för avsändare och mottagare.</p>
 
   <h2>Ta bort dina uppgifter</h2>

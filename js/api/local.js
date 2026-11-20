@@ -3,7 +3,7 @@
 import { materializeSeed } from '../seed.js';
 import { financeSummary, visibleInFeed, normalizePostInput, normalizeUrl, geocode, eventColumns, sortCategories, resizeImage, blobToDataURL } from '../util.js';
 
-const KEY = 'kooperativsystemet-demo-v6';
+const KEY = 'kooperativsystemet-demo-v7';
 const subs = new Set();
 const fresh = () => ({ ...materializeSeed(), credentials: {}, session: null, notifications: [], messages: [] });
 
@@ -35,7 +35,7 @@ const profileOf = (id) => {
 };
 const groupOf = (id) => {
   const g = id && db.groups.find((x) => x.id === id);
-  return g ? { id: g.id, name: g.name, avatar_url: g.avatar_url, city: g.city || null, region: g.region || null, country: g.country || null } : null;
+  return g ? { id: g.id, name: g.name, avatar_url: g.avatar_url, city: g.city || null, region: g.region || null, country: g.country || null, postcode: g.postcode || null } : null;
 };
 
 function shapePost(p) {
@@ -105,7 +105,7 @@ export const api = {
   // ---- Konto ----
   onAuthChange(cb) { subs.add(cb); return () => subs.delete(cb); },
   async getMe() { return db.session ? clone(db.profiles.find((p) => p.id === db.session) || null) : null; },
-  async signUp({ email, password, name, nickname, avatarFile }) {
+  async signUp({ email, password, name, nickname, avatarFile, home }) {
     email = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Ange en giltig e-postadress.');
     if (!name.trim()) throw new Error('Skriv ditt namn.');
@@ -113,7 +113,7 @@ export const api = {
     if (db.credentials[email]) throw new Error('Det finns redan ett konto med den e-postadressen.');
     const id = uuid();
     const avatar_url = avatarFile ? await storeImage(avatarFile, 400) : null;
-    db.profiles.push({ id, name: name.trim(), nickname: (nickname || '').trim() || null, avatar_url, created_at: now(), last_seen_at: now() });
+    db.profiles.push({ id, name: name.trim(), nickname: (nickname || '').trim() || null, avatar_url, home: home ? clone(home) : null, created_at: now(), last_seen_at: now() });
     db.credentials[email] = { id, hash: await sha(password) };
     db.session = id;
     persist(); emit();
@@ -130,8 +130,9 @@ export const api = {
   async requestPasswordReset() { throw new Error('I demoläget skickas inga mejl. Skapa ett nytt konto i stället.'); },
   async setNewPassword() {},
   async touch() { const p = db.profiles.find((x) => x.id === db.session); if (p) { p.last_seen_at = now(); persist(); } },
-  async updateProfile({ name, nickname, avatarFile }) {
+  async updateProfile({ name, nickname, avatarFile, home }) {
     const p = db.profiles.find((x) => x.id === needMe());
+    if (home) p.home = clone(home);
     if (name?.trim()) p.name = name.trim();
     if (nickname !== undefined) p.nickname = nickname.trim() || null;
     if (avatarFile) p.avatar_url = await storeImage(avatarFile, 400);
@@ -153,6 +154,7 @@ export const api = {
   },
 
   // ---- Grupper ----
+  async listPlaces() { return db.groups.map((g) => ({ country: g.country, region: g.region, city: g.city })); },
   async listGroups(q = '') {
     const me = db.session; q = q.trim().toLowerCase();
     return clone(db.groups.filter((g) => !q || [g.name, g.description, g.city, g.region, g.country].some((x) => (x || '').toLowerCase().includes(q)))

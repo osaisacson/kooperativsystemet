@@ -4,12 +4,13 @@ import { api } from '../api/index.js';
 import { useStore, useAsync, toast } from '../store.js';
 import { Avatar, Loading, ErrorBox } from '../ui.js';
 import { inPlace, placeLabel, eventTitle } from '../util.js';
-import { PlaceSwitcher } from './feed.js';
+import { PlaceSwitcher } from './place.js';
 
 // Var evenemanget äger rum – evenemangets egen plats, annars gruppens.
-const eventPlace = (p) => ({
-  city: p.event_city || p.group?.city, region: p.event_region || p.group?.region, country: p.event_country || p.group?.country,
-});
+// Har evenemanget en egen plats används den helt (även postnumret, för stadsdelen).
+const eventPlace = (p) => (p.event_city || p.event_postcode
+  ? { city: p.event_city, region: p.event_region, country: p.event_country || p.group?.country, postcode: p.event_postcode }
+  : { city: p.group?.city, region: p.group?.region, country: p.group?.country, postcode: p.group?.postcode });
 
 // Prenumerera: telefonens kalender hämtar en egen länk regelbundet, så evenemang man är intresserad av
 // eller kommer på läggs till – och ändras eller försvinner – av sig själva.
@@ -33,13 +34,10 @@ function Subscribe() {
 
 export function CalendarView() {
   const s = useStore();
-  const [zip, setZip] = useState('');
   const events = useAsync(() => api.listEvents(), []);
   const groups = useAsync(() => api.listGroups(), []);
   const place = s.place || { level: 'world' };
-  const digits = zip.replace(/\D/g, '');
-  const list = (events.data || []).filter((p) => inPlace(eventPlace(p), place)
-    && (!digits || (p.event_postcode || '').replace(/\D/g, '').startsWith(digits)));
+  const list = (events.data || []).filter((p) => inPlace(eventPlace(p), place));
 
   // Gruppera per dag
   const days = [];
@@ -62,12 +60,8 @@ export function CalendarView() {
     <header class="topbar brand"><${PlaceSwitcher} groups=${groups.data || []} />
       <a class="chip-add" href="#/ny?typ=evenemang" aria-label="Nytt evenemang" style="margin-left:auto"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></a></header>
     <${Subscribe} />
-    <div class="cal-filter">
-      <input inputmode="numeric" value=${zip} onInput=${(e) => setZip(e.target.value)} placeholder="Postnummer" aria-label="Filtrera på postnummer" />
-      ${zip && html`<button class="clear" aria-label="Rensa" onClick=${() => setZip('')}>×</button>`}
-    </div>
     ${events.loading && !events.data ? html`<${Loading} />` : events.error ? html`<${ErrorBox} error=${events.error} />`
-      : !days.length ? html`<p class="empty">Inga kommande evenemang i ${placeLabel(place)}${digits ? ` med postnummer ${zip}` : ''}.
+      : !days.length ? html`<p class="empty">Inga kommande evenemang i ${placeLabel(place)}.
           <br /><span class="small">Tryck på <b>+</b> uppe till höger för att lägga upp ett.</span></p>`
       : days.map((d) => html`<section class="cal-day" key=${d.key}>
           <h2 class="cal-date">${dayLabel(d.date)}</h2>

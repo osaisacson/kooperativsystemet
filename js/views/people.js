@@ -4,6 +4,7 @@ import { api } from '../api/index.js';
 import { APP_NAME, AUTH_PROVIDERS, VAPID_PUBLIC_KEY } from '../config.js';
 import { useStore, useAsync, go, attempt, refreshMe, refreshBadges, setState, toast } from '../store.js';
 import { Avatar, Header, PostGrid, GroupRow, UserRow, ImagePicker, Loading, ErrorBox } from '../ui.js';
+import { HomePlaceFields, checkHome, emptyHome } from './place.js';
 
 const PROVIDERS = {
   google: { label: 'Fortsätt med Google', icon: '<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>' },
@@ -28,6 +29,7 @@ export function AuthView() {
   const [name, setName] = useState('');
   const [nickname, setNickname] = useState('');
   const [file, setFile] = useState(null);
+  const [home, setHome] = useState(emptyHome);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [info, setInfo] = useState('');
@@ -40,7 +42,9 @@ export function AuthView() {
         setInfo('Om det finns ett konto med den adressen har vi skickat ett mejl med en länk. Hittar du det inte? Titta i skräpposten.');
         return;
       } else {
-        const r = await api.signUp({ email, password, name, nickname, avatarFile: file });
+        const bad = checkHome(home);
+        if (bad) { setErr(bad); return; }
+        const r = await api.signUp({ email, password, name, nickname, avatarFile: file, home });
         if (r.needsConfirmation) { setInfo('Nästan klart! Vi har skickat ett mejl – klicka på länken i det och logga sedan in här.'); setMode('login'); }
         else go('/valkommen');
       }
@@ -48,6 +52,7 @@ export function AuthView() {
     } catch (x) { setErr(x.message); } finally { setBusy(false); }
   }
   const signup = mode === 'signup';
+  const places = useAsync(() => (signup ? api.listPlaces() : Promise.resolve([])), [signup]);
   const reset = mode === 'reset';
   const switchTo = (m) => { setMode(m); setErr(''); setInfo(''); };
   return html`<div class="auth">
@@ -61,6 +66,7 @@ export function AuthView() {
         <label>Smeknamn <small>(valfritt)</small><input autocomplete="nickname" value=${nickname} onInput=${(e) => setNickname(e.target.value)} /></label>`}
       <label>E-post<input required type="email" autocomplete="email" value=${email} onInput=${(e) => setEmail(e.target.value)} /></label>
       ${!reset && html`<label>Lösenord<input required type="password" minlength="6" autocomplete=${signup ? 'new-password' : 'current-password'} value=${password} onInput=${(e) => setPassword(e.target.value)} /></label>`}
+      ${signup && html`<${HomePlaceFields} value=${home} onChange=${setHome} groups=${places.data} />`}
       ${mode === 'login' && html`<button type="button" class="link small forgot" onClick=${() => switchTo('reset')}>Glömt lösenordet?</button>`}
       ${info && html`<p class="info">${info}</p>`}
       ${err && html`<p class="error">${err}</p>`}
@@ -212,9 +218,15 @@ export function EditProfile() {
   const [name, setName] = useState(s.me.name);
   const [nickname, setNickname] = useState(s.me.nickname || '');
   const [file, setFile] = useState(null);
+  const [home, setHome] = useState(() => (s.me.home ? { ...emptyHome(), ...s.me.home } : emptyHome()));
+  const groups = useAsync(() => api.listGroups(), []);
   async function save(e) {
     e.preventDefault();
-    if (await attempt(() => api.updateProfile({ name, nickname, avatarFile: file }), 'Profilen sparades')) { await refreshMe(); go('/profil/' + s.me.id); }
+    const changed = home.country && JSON.stringify(home) !== JSON.stringify(s.me.home ? { ...emptyHome(), ...s.me.home } : emptyHome());
+    if (changed && checkHome(home)) return toast(checkHome(home));
+    if (await attempt(() => api.updateProfile({ name, nickname, avatarFile: file, home: changed ? home : undefined }), 'Profilen sparades')) {
+      await refreshMe(); go('/profil/' + s.me.id);
+    }
   }
   async function leave(g) {
     const msg = g.role === 'admin'
@@ -228,6 +240,8 @@ export function EditProfile() {
       <${ImagePicker} current=${s.me.avatar_url} name=${s.me.name} onFile=${setFile} label="Byt profilbild" />
       <label>Namn<input required value=${name} onInput=${(e) => setName(e.target.value)} /></label>
       <label>Smeknamn <small>(valfritt)</small><input value=${nickname} onInput=${(e) => setNickname(e.target.value)} /></label>
+      <${HomePlaceFields} value=${home} onChange=${setHome} groups=${groups.data} />
+      <small class="muted">Din plats syns bara för dig. Den bestämmer var appen startar.</small>
       <button class="btn primary block">Spara</button>
     </form>
     ${s.myGroups.length > 0 && html`<div class="label pad-x">Dina grupper</div>

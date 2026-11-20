@@ -1,9 +1,10 @@
 // Gruppsida, höjdpunkter, gruppinställningar, ny grupp och välkomststeget.
 import { html, useState } from '../lib.js';
 import { api } from '../api/index.js';
-import { useStore, useAsync, go, attempt, refreshMe } from '../store.js';
+import { useStore, useAsync, go, attempt, refreshMe, toast } from '../store.js';
 import { Icon, Avatar, Header, PostGrid, GroupRow, Modal, ImagePicker, Loading, ErrorBox, AddressPicker } from '../ui.js';
 import { prettyUrl, countryNames } from '../util.js';
+import { HomePlaceFields, checkHome, emptyHome } from './place.js';
 
 // Land, region och stad för en grupp. Förslag hämtas från andra grupper.
 function PlaceFields({ value, onChange }) {
@@ -207,12 +208,28 @@ export function NewGroup({ next }) {
   </div>`;
 }
 
+// Första steget för den som saknar plats (t.ex. konton skapade med Google): var håller du till?
+function HomeStep({ groups }) {
+  const [home, setHome] = useState(emptyHome);
+  async function save(e) {
+    e.preventDefault();
+    const bad = checkHome(home);
+    if (bad) return toast(bad);
+    if (await attempt(() => api.updateProfile({ home }), 'Platsen sparades')) await refreshMe();
+  }
+  return html`<form class="form pad card welcome-place" onSubmit=${save}>
+    <${HomePlaceFields} value=${home} onChange=${setHome} groups=${groups} />
+    <button class="btn primary block">Spara plats</button>
+  </form>`;
+}
+
 export function Welcome() {
   const s = useStore();
   const groups = useAsync(() => api.listGroups(), []);
   return html`<div class="page">
     <div class="pad welcome">
       <h1>Välkommen, ${s.me.name.split(' ')[0]}!</h1>
+      ${!s.me.home && html`<${HomeStep} groups=${groups.data} />`}
       <p>Gå med i de grupper du är med i, eller skapa en ny. Det går att ändra senare.</p>
       <a class="btn block" href="#/ny-grupp?next=/valkommen">+ Skapa en ny grupp</a>
     </div>
