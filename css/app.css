@@ -601,3 +601,7 @@ a.todo small { display: block; }
 .scale .scale-search { width: 100%; margin: 4px 0 10px; }
 .group-add { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 1.5px dashed var(--muted); display: grid; place-items: center; font-size: 22px; color: var(--muted); text-decoration: none; }
 .group-icons { padding: 8px 16px 4px; }
+.setting-row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 14px; }
+.setting-row span { flex: 1; }
+.settings-block { margin-bottom: 16px; }
+.badge-setting .btnrow { display: flex; gap: 6px; flex: none; }

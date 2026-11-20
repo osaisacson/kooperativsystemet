@@ -181,7 +181,11 @@ export function NewPassword() {
 
 // Notiser + siffra på appikonen, även när appen är stängd (push). På iPhone fungerar det bara i appen sparad på hemskärmen.
 const urlB64 = (s) => { const p = '='.repeat((4 - (s.length % 4)) % 4); const r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, (c) => c.charCodeAt(0)); };
-function PushSetting() {
+// Notiser. På profilsidan visas bara en vänlig fråga om de inte är påslagna (och den går att avböja);
+// i Redigera profil finns inställningen alltid, så att man kan slå på eller stänga av.
+const PUSH_DISMISSED = 'push-fraga-avbojd';
+function PushSetting({ settings = false }) {
+  const [dismissed, setDismissed] = useState(() => { try { return !!localStorage.getItem(PUSH_DISMISSED); } catch { return false; } });
   const supported = api.mode === 'supabase' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   const ios = /iphone|ipad/i.test(navigator.userAgent);
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
@@ -190,7 +194,13 @@ function PushSetting() {
     if (!supported) return setState2('nej');
     navigator.serviceWorker.ready.then((r) => r.pushManager.getSubscription()).then((s) => setState2(s && Notification.permission === 'granted' ? 'på' : Notification.permission === 'denied' ? 'nekad' : 'av'));
   }, []);
-  if (!supported) return ios && !standalone ? html`<div class="nudge badge-setting"><span>Spara appen på hemskärmen för att kunna få notiser och en siffra på appikonen.</span></div>` : null;
+  const dismiss = () => { try { localStorage.setItem(PUSH_DISMISSED, '1'); } catch { /* ok */ } setDismissed(true); };
+  if (!supported) {
+    if (settings && !(ios && !standalone)) return html`<div class="setting-row"><span class="muted">${api.mode === 'demo' ? 'Notiser fungerar inte i demoläget.' : 'Notiser fungerar inte i den här webbläsaren.'}</span></div>`;
+    if (!(ios && !standalone) || (!settings && dismissed)) return null;
+    return html`<div class=${settings ? 'setting-row' : 'nudge badge-setting'}><span>Spara appen på hemskärmen för att kunna få notiser och en siffra på appikonen.</span>
+      ${!settings && html`<button class="btn small" onClick=${dismiss}>Inte nu</button>`}</div>`;
+  }
   async function on() {
     try {
       const perm = await Notification.requestPermission();
@@ -207,10 +217,17 @@ function PushSetting() {
     setState2('av'); toast('Notiser är avstängda');
   }
   if (state === 'laddar') return null;
-  return html`<div class="nudge badge-setting">
-    ${state === 'på' ? html`<span>Notiser är på: du får besked om nya meddelanden och ansökningar, och en siffra på appikonen.</span><button class="btn small" onClick=${off}>Stäng av</button>`
-      : state === 'nekad' ? html`<span>Notiser är blockerade för appen. Slå på dem i telefonens inställningar för appen.</span>`
-      : html`<span>Vill du få notiser om nya meddelanden och ansökningar, och en siffra på appikonen?</span><button class="btn small primary" onClick=${on}>Slå på</button>`}
+  if (!settings) {
+    if (state !== 'av' || dismissed) return null;
+    return html`<div class="nudge badge-setting">
+      <span>Vill du få notiser om nya meddelanden och ansökningar, och en siffra på appikonen?</span>
+      <span class="btnrow"><button class="btn small primary" onClick=${on}>Slå på</button><button class="btn small" onClick=${dismiss}>Inte nu</button></span>
+    </div>`;
+  }
+  return html`<div class="setting-row">
+    ${state === 'på' ? html`<span><b>Notiser är på.</b> Du får besked om nya meddelanden och ansökningar, och en siffra på appikonen.</span><button class="btn small" onClick=${off}>Stäng av</button>`
+      : state === 'nekad' ? html`<span><b>Notiser är blockerade.</b> Slå på dem för appen i telefonens eller webbläsarens inställningar.</span>`
+      : html`<span><b>Notiser är av.</b> Slå på för att få besked om nya meddelanden och ansökningar, och en siffra på appikonen.</span><button class="btn small primary" onClick=${on}>Slå på</button>`}
   </div>`;
 }
 
@@ -245,6 +262,8 @@ export function EditProfile() {
       <small class="muted">Din plats syns bara för dig. Den bestämmer var appen startar.</small>
       <button class="btn primary block">Spara</button>
     </form>
+    <div class="label pad-x">Notiser</div>
+    <div class="pad-x settings-block"><${PushSetting} settings /></div>
     ${s.myGroups.length > 0 && html`<div class="label pad-x">Dina grupper</div>
     <div class="list">${s.myGroups.map((g) => html`<div class="row" key=${g.id}>
       <a href=${'#/grupp/' + g.id}><${Avatar} src=${g.avatar_url} name=${g.name} size=${40} /></a>
