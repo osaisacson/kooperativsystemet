@@ -599,3 +599,5 @@ a.todo small { display: block; }
 .home-nudge { display: block; margin: 8px 12px; color: inherit; text-decoration: none; }
 .welcome-place { margin: 12px 0; }
 .scale .scale-search { width: 100%; margin: 4px 0 10px; }
+.group-add { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 1.5px dashed var(--muted); display: grid; place-items: center; font-size: 22px; color: var(--muted); text-decoration: none; }
+.group-icons { padding: 8px 16px 4px; }

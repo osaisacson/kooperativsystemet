@@ -108,13 +108,14 @@ export function Search({ tab: initialTab }) {
 }
 
 // Gruppernas ikoner i en rad som går att scrolla åt höger; fler laddas in när man närmar sig slutet.
-function GroupIcons({ groups }) {
+function GroupIcons({ groups, canAdd }) {
   const [shown, setShown] = useState(24);
   const more = (e) => {
     const el = e.currentTarget;
     if (shown < groups.length && el.scrollLeft + el.clientWidth > el.scrollWidth - 120) setShown((n) => n + 24);
   };
   return html`<div class="group-icons" onScroll=${more} aria-label="Grupper">
+    ${canAdd && html`<a class="group-add" href="#/valkommen" title="Gå med i eller skapa en grupp" aria-label="Gå med i eller skapa en grupp">+</a>`}
     ${groups.slice(0, shown).map((g) => html`<a href=${'#/grupp/' + g.id} key=${g.id} title=${g.name + (g.role === 'admin' ? ' (admin)' : '')}>
       <${Avatar} src=${g.avatar_url} name=${g.name} size=${44} /></a>`)}
   </div>`;
@@ -131,7 +132,6 @@ export function Profile({ id }) {
   async function logout() { await api.signOut(); await refreshMe(); go('/'); }
   return html`<div class="page">
     <${Header} title=${user.name} back=${!isMe} />
-    ${user.groups.length > 0 && html`<${GroupIcons} groups=${user.groups} />`}
     <div class="profile-head">
       <${Avatar} src=${user.avatar_url} name=${user.name} size=${84} />
       <div class="stats">
@@ -140,13 +140,14 @@ export function Profile({ id }) {
       </div>
     </div>
     <div class="profile-info"><strong>${user.name}</strong>${user.nickname && html` <span class="muted">"${user.nickname}"</span>`}</div>
+    ${(isMe || user.groups.length > 0) && html`<${GroupIcons} groups=${user.groups} canAdd=${isMe} />`}
     <div class="profile-actions">
       ${isMe
         ? html`<a class="btn" href="#/redigera-profil">Redigera profil</a><button class="btn" onClick=${logout}>Logga ut</button>`
         : html`<a class="btn primary" href=${'#/meddelanden/' + id}>Skicka meddelande</a>`}
     </div>
     ${isMe && html`<${PushSetting} />`}
-    ${isMe && user.groups.length === 0 && html`<div class="nudge pad-x">Du är inte med i någon grupp än. <a href="#/valkommen">Hitta eller skapa en grupp</a></div>`}
+    ${isMe && user.groups.length === 0 && html`<p class="muted small pad-x">Du är inte med i någon grupp än – tryck på <b>+</b> för att gå med i en eller skapa en ny.</p>`}
     <div class="grid-sep"></div>
     ${posts.data ? html`<${PostGrid} posts=${posts.data} />` : html`<${Loading} />`}
   </div>`;
