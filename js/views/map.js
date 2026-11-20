@@ -78,12 +78,12 @@ export function MapView() {
       <button class="iconbtn" aria-label="Tillbaka" onClick=${() => goBack('/')}><${Icon} name="back" /></button>
       <${PlaceSwitcher} groups=${all} />
     </header>
-    <div class="map-box" ref=${box}>${groups.loading && !groups.data && html`<${Loading} />`}</div>
+    <div class="map-split"><div class="map-box" ref=${box}>${groups.loading && !groups.data && html`<${Loading} />`}</div>
     <div class="map-list">
       <div class="label pad-x">${here.length} ${here.length === 1 ? 'grupp' : 'grupper'} i ${placeLabel(place)}${missing > 0 ? html` <span class="muted small">(${missing} saknar plats på kartan)</span>` : ''}</div>
       <div class="list">${here.map((g) => html`<a class="row" href=${'#/grupp/' + g.id} key=${g.id}>
         <${Avatar} src=${g.avatar_url} name=${g.name} size=${40} />
         <span class="row-main"><strong>${g.name}</strong><small class="muted">${where(g)}</small></span></a>`)}</div>
-    </div>
+    </div></div>
   </div>`;
 }

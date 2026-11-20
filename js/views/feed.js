@@ -178,7 +178,7 @@ export function Home() {
     ${posts.loading && !posts.data ? html`<${Loading} />` : posts.error ? html`<${ErrorBox} error=${posts.error} />`
       : shown.length === 0 ? html`<p class="empty">${{ flode: 'Inga inlägg', finansiering: 'Ingen finansiering att söka', lokal: 'Inga lokaler', minne: 'Inget sparat i långtidsminnet' }[tab]} i ${where}${(fn || cost || memTags.length || memQ) ? ' som matchar' : ' än'}.
           ${place.level !== 'world' && html`<br /><span class="small">Tryck på <b>${where}</b> högst upp för att se region, land eller hela världen.</span>`}</p>`
-      : shown.map((p) => html`<${PostCard} key=${p.id} post=${p} onChange=${posts.reload} />`)}
+      : html`<div class="feed">${shown.map((p) => html`<${PostCard} key=${p.id} post=${p} onChange=${posts.reload} />`)}</div>`}
   </div>`;
 }
 
@@ -195,15 +195,19 @@ export function PostView({ id }) {
   return html`<div class="page">
     <${Header} title=${post.data?.finance ? 'Finansiering' : 'Inlägg'} back />
     ${post.loading && !post.data ? html`<${Loading} />` : post.error ? html`<${ErrorBox} error=${post.error} />` : html`
-      <${PostCard} post=${post.data} full onChange=${post.reload} />
-      <section class="comments-section">
-        <h2 class="section-title">Kommentarer${post.data.finance ? ' och ansökningar' : ''}</h2>
-        <${Comments} post=${post.data} onChange=${post.reload} />
-      </section>
-      <form class="comment-form" onSubmit=${send}>
-        <input value=${body} onInput=${(e) => setBody(e.target.value)} placeholder="Skriv en kommentar…" aria-label="Kommentar" />
-        <button class="link strong" disabled=${!body.trim() || busy}>Publicera</button>
-      </form>`}
+      <div class="post-page">
+        <div class="post-main"><${PostCard} post=${post.data} full onChange=${post.reload} /></div>
+        <div class="post-side">
+          <section class="comments-section">
+            <h2 class="section-title">Kommentarer${post.data.finance ? ' och ansökningar' : ''}</h2>
+            <${Comments} post=${post.data} onChange=${post.reload} />
+          </section>
+          <form class="comment-form" onSubmit=${send}>
+            <input value=${body} onInput=${(e) => setBody(e.target.value)} placeholder="Skriv en kommentar…" aria-label="Kommentar" />
+            <button class="link strong" disabled=${!body.trim() || busy}>Publicera</button>
+          </form>
+        </div>
+      </div>`}
   </div>`;
 }
 

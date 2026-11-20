@@ -41,13 +41,18 @@ function route({ parts: [a, b, c], query }) {
 function BottomNav({ r }) {
   const s = useStore();
   const [a, b] = r.parts;
-  const item = (href, label, on, icon, n) => html`<a href=${href} aria-label=${label} class=${on ? 'on' : ''}>${icon}<${Count} n=${n} /></a>`;
+  // På mobilen en meny längst ner; på surfplatta och dator en meny till vänster med text (se app.css).
+  const item = (href, label, on, icon, n, cls = '') => html`<a href=${href} aria-label=${label} title=${label} class=${(on ? 'on ' : '') + cls}>${icon}<${Count} n=${n} /><span class="nav-label">${label}</span></a>`;
   return html`<nav class="bottomnav">
+    <a class="nav-logo desk" href="#/" aria-hidden="true" tabindex="-1"><img src="icon.svg" alt="" width="34" height="34" /><span class="nav-label">Kooperativsystemet</span></a>
     ${item('#/', 'Hem', !a, html`<${Icon} name="home" size=${26} />`)}
     ${item('#/kalender', 'Kalender', a === 'kalender', html`<${Icon} name="calendar" size=${26} />`)}
     ${item('#/sok', 'Sök', a === 'sok', html`<${Icon} name="search" size=${26} />`)}
+    ${item('#/karta', 'Karta', a === 'karta', html`<${Icon} name="map" size=${26} />`, 0, 'desk')}
+    ${item('#/meddelanden', 'Meddelanden', a === 'meddelanden', html`<${Icon} name="chat" size=${26} />`, s.badges.messages, 'desk')}
+    ${s.badges.todos > 0 && item('#/att-gora', 'Checklista', a === 'att-gora', html`<${Icon} name="check" size=${26} />`, s.badges.todos, 'desk')}
     ${item('#/ny', 'Nytt inlägg', a === 'ny', html`<${Icon} name="plus" size=${26} />`)}
-    ${item('#/profil/' + s.me.id, 'Min profil', a === 'profil' && b === s.me.id, html`<span class="nav-avatar"><${Avatar} src=${s.me.avatar_url} name=${s.me.name} size=${26} /></span>`)}
+    ${item('#/profil/' + s.me.id, 'Profil', a === 'profil' && b === s.me.id, html`<span class="nav-avatar"><${Avatar} src=${s.me.avatar_url} name=${s.me.name} size=${26} /></span>`)}
   </nav>`;
 }
 
@@ -90,7 +95,7 @@ function App() {
   }, []);
   if (!ready) return html`<div class="splash">…</div>`;
   return html`<div class="app">
-    ${s.recovering ? html`<${NewPassword} />` : s.me ? html`<main key=${r.path + '?' + r.query}><${Safe}>${route(r)}<//></main><${BottomNav} r=${r} />` : html`<${AuthView} />`}
+    ${s.recovering ? html`<${NewPassword} />` : s.me ? html`<main key=${r.path + '?' + r.query} class=${['karta', 'grupp', 'profil', undefined].includes(r.parts[0]) && r.parts[2] !== 'installningar' ? 'wide' : ''} data-page=${r.parts[0] || 'hem'}><${Safe}>${route(r)}<//></main><${BottomNav} r=${r} />` : html`<${AuthView} />`}
     ${s.toast && html`<div class="toast" role="status">${s.toast}</div>`}
   </div>`;
 }

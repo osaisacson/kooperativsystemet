@@ -484,3 +484,62 @@ a.todo small { display: block; }
 .crash { padding: 48px 20px; text-align: center; }
 .crash h2 { font-size: 18px; margin-bottom: 8px; }
 .crash .btnrow { justify-content: center; margin-top: 16px; }
+
+/* ---- Stora skärmar: surfplatta och dator ----
+   Mobil (< 760 px): som förut, en kolumn och meny längst ner.
+   Surfplatta (760–1179 px): smal meny med ikoner till vänster, flödet i två kolumner.
+   Dator (≥ 1180 px): meny med text till vänster, flödet i tre kolumner, inlägg med kommentarer bredvid bilden. */
+.nav-label, .desk, .bottomnav .desk { display: none; }
+@media (min-width: 760px) {
+  :root { --nav-h: 0px; --rail: 76px; }
+  .app { max-width: none; border: 0; padding-left: var(--rail); }
+  main { max-width: 680px; margin: 0 auto; min-height: 100dvh; padding-bottom: 40px; border-inline: 1px solid var(--line); }
+  main.wide { max-width: 1240px; border: 0; }
+  .bottomnav { top: 0; left: 0; bottom: 0; transform: none; width: var(--rail); max-width: none; height: auto; padding: 14px 0;
+    flex-direction: column; justify-content: flex-start; gap: 6px; border-top: 0; border-right: 1px solid var(--line); overflow-y: auto; }
+  .bottomnav a { width: 52px; height: 48px; border-radius: 12px; }
+  .bottomnav a:hover { background: var(--bg-soft); color: var(--text); }
+  .bottomnav .desk { display: grid; }
+  .bottomnav .nav-logo { margin-bottom: 12px; }
+  .bottomnav .nav-logo img { border-radius: 9px; }
+  .toast { bottom: 24px; left: calc(50% + var(--rail) / 2); }
+
+  /* Flödet som rutnät med kort i rader */
+  .feed { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; padding: 4px 20px 20px; align-items: start; }
+  .feed .post { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; padding-bottom: 8px; background: var(--bg); }
+  .feed .post .caption { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+  main.wide .stories, main.wide .filterbar, main.wide .tab-head, main.wide .space-filters, main.wide .memory-search,
+  main.wide .install-hint, main.wide .demo-banner { margin-inline: 20px; }
+  main.wide .stories { padding-inline: 0; }
+  main.wide .filterbar { justify-content: flex-start; gap: 8px; }
+  main.wide .filterbar button { flex: 0 0 auto; padding-inline: 14px; }
+  main.wide .tab-head { padding-inline: 0; }
+
+  /* Grupp- och profilsidor: innehållet i en läsbar bredd, bildrutnätet bredare */
+  main[data-page="grupp"], main[data-page="profil"] { max-width: 960px; }
+  main[data-page="grupp"] .grid, main[data-page="profil"] .grid { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+
+  /* Kartan fyller höjden, listan vid sidan */
+  .map-split { display: grid; grid-template-columns: 1fr 340px; height: calc(100dvh - 56px); }
+  .map-split .map-box { height: 100%; }
+  .map-split .map-list { overflow-y: auto; border-left: 1px solid var(--line); }
+
+  .composer, .comment-form { bottom: 0; }
+}
+@media (min-width: 1180px) {
+  :root { --rail: 232px; }
+  .bottomnav { align-items: stretch; padding: 18px 12px; }
+  .bottomnav a, .bottomnav .desk { width: auto; display: flex; align-items: center; justify-content: flex-start; gap: 14px; padding: 0 12px; }
+  .bottomnav .nav-label { display: inline; font-size: 15px; color: var(--text); }
+  .bottomnav a.on .nav-label { font-weight: 700; }
+  .bottomnav .nav-logo .nav-label { font-weight: 700; color: var(--accent); letter-spacing: -.01em; }
+  .bottomnav .count { top: 6px; left: 26px; right: auto; }
+
+  /* Inlägg: bild till vänster, kommentarer till höger */
+  main[data-page="post"] { max-width: 1120px; }
+  .post-page { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); align-items: start; }
+  .post-main { position: sticky; top: 52px; border-right: 1px solid var(--line); }
+  .post-main .post { border-bottom: 0; }
+  .post-side { min-height: calc(100dvh - 52px); display: flex; flex-direction: column; }
+  .post-side .comments-section { flex: 1; }
+}
