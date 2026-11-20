@@ -59,6 +59,41 @@ function BottomNav({ r }) {
   </nav>`;
 }
 
+// Dra ner överst på sidan för att uppdatera (som i andra appar). Sidan laddas om inifrån, så att man stannar kvar.
+// I Safari utanför hemskärmsappen gör webbläsaren det själv, så där används den inbyggda.
+function usePullToRefresh(onRefresh) {
+  const [pull, setPull] = useState(0);
+  useEffect(() => {
+    const ios = /iphone|ipad/i.test(navigator.userAgent);
+    const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+    if (ios && !standalone) return;
+    let startY = null, dist = 0;
+    const down = (e) => {
+      if (window.scrollY > 0 || document.body.classList.contains('locked') || e.touches.length !== 1) return;
+      if (e.target.closest('input, textarea, select, .map-box, .modal, .sheet')) return;
+      startY = e.touches[0].clientY; dist = 0;
+    };
+    const move = (e) => {
+      if (startY == null) return;
+      dist = e.touches[0].clientY - startY;
+      if (dist <= 0 || window.scrollY > 0) { setPull(0); return; }
+      setPull(Math.min(dist * 0.5, 90));
+    };
+    const up = () => {
+      if (startY == null) return;
+      startY = null;
+      if (dist * 0.5 >= 65) { setPull(-1); Promise.resolve(onRefresh()).finally(() => setTimeout(() => setPull(0), 400)); }
+      else setPull(0);
+    };
+    addEventListener('touchstart', down, { passive: true });
+    addEventListener('touchmove', move, { passive: true });
+    addEventListener('touchend', up);
+    addEventListener('touchcancel', up);
+    return () => { removeEventListener('touchstart', down); removeEventListener('touchmove', move); removeEventListener('touchend', up); removeEventListener('touchcancel', up); };
+  }, []);
+  return pull;
+}
+
 // Fångar fel på en sida så att appen inte blir en vit, fryst skärm.
 class Safe extends Component {
   constructor() { super(); this.state = { error: null }; }
@@ -78,6 +113,8 @@ function App() {
   const s = useStore();
   const [r, setR] = useState(parse());
   const [ready, setReady] = useState(false);
+  const [fresh, setFresh] = useState(0);   // ökas för att ladda om sidan
+  const pull = usePullToRefresh(async () => { setFresh((x) => x + 1); await Promise.all([refreshMe(), refreshBadges()]).catch(() => {}); });
   useEffect(() => {
     const onHash = () => {
       setR(parse()); window.scrollTo(0, 0); refreshBadges();
@@ -98,7 +135,9 @@ function App() {
   }, []);
   if (!ready) return html`<div class="splash">…</div>`;
   return html`<div class="app">
-    ${s.recovering ? html`<${NewPassword} />` : s.me ? html`<main key=${r.path + '?' + r.query} class=${['karta', 'grupp', 'profil', undefined].includes(r.parts[0]) && r.parts[2] !== 'installningar' ? 'wide' : ''} data-page=${r.parts[0] || 'hem'}><${Safe}>${route(r)}<//></main><${BottomNav} r=${r} />` : html`<${AuthView} />`}
+    ${s.recovering ? html`<${NewPassword} />` : s.me ? html`<div class=${'ptr' + (pull ? ' on' : '') + (pull === -1 ? ' spin' : '')} style=${pull > 0 ? `height:${pull}px` : ''} aria-hidden="true">
+      <span class=${'ptr-icon' + (pull >= 65 ? ' ready' : '')}>↻</span></div>
+      <main key=${r.path + '?' + r.query + '#' + fresh} class=${['karta', 'grupp', 'profil', undefined].includes(r.parts[0]) && r.parts[2] !== 'installningar' ? 'wide' : ''} data-page=${r.parts[0] || 'hem'}><${Safe}>${route(r)}<//></main><${BottomNav} r=${r} />` : html`<${AuthView} />`}
     ${s.toast && html`<div class="toast" role="status">${s.toast}</div>`}
   </div>`;
 }

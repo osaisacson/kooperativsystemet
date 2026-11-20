@@ -747,3 +747,12 @@ a.todo small { display: block; }
 #kalender { scroll-margin-top: 110px; }
 .profile-tools { display: inline-flex; gap: 2px; }
 @media (min-width: 760px) { .profile-tools { display: none; } }   /* finns i sidomenyn */
+/* Dra ner för att uppdatera */
+html, body { overscroll-behavior-y: contain; }
+.ptr { height: 0; overflow: hidden; display: grid; place-items: end center; transition: height .2s; }
+.ptr.on { transition: none; }
+.ptr.spin { height: 48px; transition: height .2s; }
+.ptr-icon { display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 8px; border-radius: 50%; background: var(--bg-soft); color: var(--muted); font-size: 18px; transition: transform .2s, color .2s; }
+.ptr-icon.ready { transform: rotate(180deg); color: var(--accent); }
+.ptr.spin .ptr-icon { color: var(--accent); animation: ptr-spin .8s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
