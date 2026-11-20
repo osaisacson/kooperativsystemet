@@ -377,13 +377,13 @@ export const api = {
 
   // ---- Feedback på appen ----
   async listFeedback() {
-    const rows = ok(await sb.from('feedback').select(`*, author:profiles(${PROFILE}), feedback_votes(user_id,value), feedback_comments(count)`).order('created_at', { ascending: false }).limit(300));
+    const rows = ok(await sb.from('feedback').select(`*, author:profiles!feedback_author_id_fkey(${PROFILE}), feedback_votes(user_id,value), feedback_comments(count)`).order('created_at', { ascending: false }).limit(300));
     return rows.map(shapeFeedback);
   },
   async getFeedback(id) {
-    const f = ok(await sb.from('feedback').select(`*, author:profiles(${PROFILE}), feedback_votes(user_id,value), feedback_comments(count)`).eq('id', id).maybeSingle());
+    const f = ok(await sb.from('feedback').select(`*, author:profiles!feedback_author_id_fkey(${PROFILE}), feedback_votes(user_id,value), feedback_comments(count)`).eq('id', id).maybeSingle());
     if (!f) throw new Error('Inlägget finns inte (längre).');
-    const comments = ok(await sb.from('feedback_comments').select(`*, author:profiles(${PROFILE})`).eq('feedback_id', id).order('created_at'));
+    const comments = ok(await sb.from('feedback_comments').select(`*, author:profiles!feedback_comments_author_id_fkey(${PROFILE})`).eq('feedback_id', id).order('created_at'));
     return { ...shapeFeedback(f), comments };
   },
   async createFeedback({ title, body }) {
