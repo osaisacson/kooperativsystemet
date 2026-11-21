@@ -1,64 +1,11 @@
 // Flödet, enskilt inlägg och skapa/redigera inlägg.
 import { html, useState, useEffect, useRef } from '../lib.js';
 import { api } from '../api/index.js';
-import { useStore, useAsync, go, attempt, refreshBadges } from '../store.js';
+import { useStore, useAsync, go, attempt, refreshBadges, onRefresh } from '../store.js';
 import { Icon, Avatar, Count, Header, PostCard, Comments, Loading, ErrorBox, Sheet, GroupPicker, AddressPicker } from '../ui.js';
 import { PAYOUT_BANK_LIMIT, POST_TYPES, DEFAULT_FUNCTIONS, SPACE_COSTS, postType, placeLabel, inPlace, postPlace, zoomOut, fmtKr, visibleInFeed } from '../util.js';
 
-// Tips om att spara appen på hemskärmen. Instruktionen anpassas efter telefon och webbläsare,
-// eftersom knapparna ligger på olika ställen. Visas tills man stänger det eller har sparat appen.
-let installPrompt = null;   // Android (Chrome, Edge, Samsung) kan installera direkt med en knapp
-addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
-
-export function installSteps(ua = navigator.userAgent, touch = navigator.maxTouchPoints || 0) {
-  const ipad = /ipad/i.test(ua) || (/macintosh/i.test(ua) && touch > 1);
-  const ios = /iphone|ipod/i.test(ua) || ipad;
-  const inApp = /FBAN|FBAV|FB_IAB|Instagram|LinkedInApp|Line\/|Snapchat|TikTok|musical_ly|; wv\)/i.test(ua);
-  const B = (t) => html`<b>${t}</b>`;
-  if (ios) {
-    if (inApp) return html`Öppna sidan i ${B('Safari')} först (via ${B('···')} eller ${B('Dela')}), sedan ${B('Dela')} → ${B('Lägg till på hemskärmen')}.`;
-    if (/CriOS/i.test(ua)) return html`Tryck på ${B('Dela ⬆︎')} uppe till höger, scrolla ner och välj ${B('Lägg till på hemskärmen')}.`;
-    if (/FxiOS|EdgiOS/i.test(ua)) return html`Tryck på menyn ${B('☰')} längst ner, välj ${B('Dela')} och sedan ${B('Lägg till på hemskärmen')}.`;
-    if (ipad) return html`Tryck på ${B('Dela ⬆︎')} uppe till höger och välj ${B('Lägg till på hemskärmen')}.`;
-    return html`Tryck på ${B('Dela ⬆︎')} längst ner (eller ${B('···')} → ${B('Dela')}), scrolla ner och välj ${B('Lägg till på hemskärmen')}.`;
-  }
-  if (/android/i.test(ua)) {
-    if (inApp) return html`Öppna sidan i ${B('Chrome')} först (via ${B('⋮')}), sedan ${B('⋮')} → ${B('Lägg till på startskärmen')}.`;
-    if (/SamsungBrowser/i.test(ua)) return html`Tryck på menyn ${B('≡')} längst ner och välj ${B('Lägg till sida på')} → ${B('Startskärm')}.`;
-    if (/Firefox/i.test(ua)) return html`Tryck på ${B('⋮')} och välj ${B('Lägg till på startskärmen')}.`;
-    return html`Tryck på ${B('⋮')} uppe till höger och välj ${B('Lägg till på startskärmen')} eller ${B('Installera app')}.`;
-  }
-  return null;   // dator: visas bara om webbläsaren kan installera med en knapp
-}
-
-function InstallHint() {
-  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-  const read = () => { try { return localStorage.getItem('install-hint-closed') === '1'; } catch { return false; } };
-  const [closed, setClosed] = useState(read);
-  const [, rerender] = useState(0);
-  useEffect(() => {
-    const on = () => rerender((x) => x + 1);
-    addEventListener('beforeinstallprompt', on);
-    const done = () => { installPrompt = null; setClosed(true); };
-    addEventListener('appinstalled', done);
-    return () => { removeEventListener('beforeinstallprompt', on); removeEventListener('appinstalled', done); };
-  }, []);
-  const steps = installSteps();
-  if (standalone || closed || (!steps && !installPrompt)) return null;
-  const close = () => { try { localStorage.setItem('install-hint-closed', '1'); } catch {} setClosed(true); };
-  async function install() {
-    const p = installPrompt; installPrompt = null;
-    p.prompt();
-    const { outcome } = await p.userChoice.catch(() => ({}));
-    if (outcome === 'accepted') setClosed(true); else rerender((x) => x + 1);
-  }
-  return html`<div class="install-hint">
-    <img src="icons/icon-192.png" alt="" width="40" height="40" />
-    <span><strong>Spara som app</strong><br />${installPrompt ? 'Få appen på startskärmen med ett tryck.' : steps}</span>
-    ${installPrompt && html`<button class="btn small primary" onClick=${install}>Installera</button>`}
-    <button class="iconbtn" aria-label="Stäng" onClick=${close}><${Icon} name="x" size=${18} /></button>
-  </div>`;
-}
+import { InstallHint } from '../install.js';
 
 const PLUS = html`<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
 
@@ -86,23 +33,29 @@ function usePagedPosts() {
     } catch (error) { setSt((x) => ({ ...x, loading: false, error })); }
     busy.current = false;
   }
-  useEffect(() => { load(true); }, []);
+  useEffect(() => { load(true); return onRefresh(() => { busy.current = false; return load(true); }); }, []);
   return { ...st, data: st.data && st.data.filter(visibleInFeed), more: () => !ref.current.done && load(false), reload: () => load(true) };
 }
+
+// Grå platshållare medan de första inläggen hämtas (som i Instagram), i stället för en text.
+const FeedSkeleton = ({ n = 2 }) => html`<div class="feed" aria-label="Hämtar inlägg">${Array.from({ length: n }, (_, i) => html`<div class="post skeleton" key=${i}>
+  <div class="post-head"><span class="sk sk-avatar"></span><span class="sk sk-line" style="width:40%"></span></div>
+  <div class="sk sk-img"></div>
+  <div class="post-body"><span class="sk sk-line" style="width:80%"></span><span class="sk sk-line" style="width:55%"></span></div></div>`)}</div>`;
 
 // Säger till när slutet av listan syns, så att fler kan hämtas.
 function LoadMore({ posts, short }) {
   const el = useRef();
   useEffect(() => {
     if (!el.current) return;
-    const io = new IntersectionObserver(([e]) => e.isIntersecting && posts.more(), { rootMargin: '600px' });
+    const io = new IntersectionObserver(([e]) => e.isIntersecting && posts.more(), { rootMargin: '1500px' });
     io.observe(el.current);
     return () => io.disconnect();
   }, [posts.data?.length, posts.done]);
   // Har den valda platsen eller fliken för lite att visa hämtas mer direkt.
   useEffect(() => { if (short && !posts.done && !posts.loading) posts.more(); }, [short, posts.done, posts.loading, posts.data?.length]);
   if (posts.done) return null;
-  return html`<div ref=${el} class="load-more">${posts.loading ? 'Hämtar fler…' : ''}</div>`;
+  return html`<div ref=${el} class="load-more">${posts.loading && html`<span class="spinner" aria-label="Hämtar fler"></span>`}</div>`;
 }
 
 const TABS = [['flode', 'Flöde'], ['finansiering', 'Finansiering'], ['lokal', 'Lokaler'], ['evenemang', 'Events'], ['minne', 'Minne']];
@@ -190,8 +143,8 @@ export function Home({ tab: startTab }) {
 
     ${tab === 'evenemang' ? html`<${EventsList} place=${place} empty=${html`<p class="empty">Inga kommande evenemang i ${where}.
           ${place.level !== 'world' && html`<br /><span class="small">Tryck på <b>‹</b> högst upp för att zooma ut till ${placeLabel(zoomOut(place))}.</span>`}</p>`} />`
-      : posts.loading && !posts.data ? html`<${Loading} />` : posts.error ? html`<${ErrorBox} error=${posts.error} />`
-      : shown.length === 0 && !posts.done ? html`<p class="empty">Letar efter inlägg…</p>`
+      : posts.loading && !posts.data ? html`<${FeedSkeleton} />` : posts.error ? html`<${ErrorBox} error=${posts.error} />`
+      : shown.length === 0 && !posts.done ? html`<${FeedSkeleton} n=${1} />`
       : shown.length === 0 ? html`<p class="empty">${{ flode: 'Inga inlägg', finansiering: 'Ingen finansiering att söka', lokal: 'Inga lokaler', minne: 'Inget sparat i långtidsminnet' }[tab]} i ${where}${(fn || cost || memTags.length || memQ) ? ' som matchar' : ' än'}.
           ${place.level !== 'world' && html`<br /><span class="small">Tryck på <b>‹</b> högst upp för att zooma ut till ${placeLabel(zoomOut(place))}.</span>`}</p>`
       : html`<div class="feed">${shown.map((p) => html`<${PostCard} key=${p.id} post=${p} onChange=${posts.reload} />`)}</div>`}
@@ -302,6 +255,7 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
   const [caption, setCaption] = useState('');
   const [groupId, setGroupId] = useState(initialGroup && s.memberOf.has(initialGroup) ? initialGroup : myGroups[0]?.id || null);
   const [personal, setPersonal] = useState(false);
+  const [asGroup, setAsGroup] = useState(false);   // admins kan publicera som gruppen
   const [tags, setTags] = useState([]);
   const [functions, setFunctions] = useState([]);
   const [cost, setCost] = useState('gratis');
@@ -320,7 +274,7 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
       if (p.author_id !== s.me.id) return go('/post/' + editId);
       setType(p.is_event ? 'evenemang' : postType(p));
       setSlides(p.slides.map((x) => ({ key: x.id, id: x.id, image_url: x.image_url, preview: x.image_url, text: x.text || '' })));
-      setCaption(p.caption || ''); setGroupId(p.group_id); setPersonal(!p.group_id);
+      setCaption(p.caption || ''); setGroupId(p.group_id); setPersonal(!p.group_id); setAsGroup(!!p.as_group);
       setTags(p.categories || []);
       setFunctions(p.space_functions || []); setCost(p.space_cost || 'gratis'); setPrice(p.space_price || '');
       if (p.is_event && p.event_start) {
@@ -355,7 +309,7 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
     setBusy(true);
     try {
       const payload = {
-        type: type === 'evenemang' ? 'vanlig' : type, groupId: isPersonal ? null : groupId, caption, tags,
+        type: type === 'evenemang' ? 'vanlig' : type, groupId: isPersonal ? null : groupId, asGroup: !isPersonal && asGroup && s.adminOf.has(groupId), caption, tags,
         slides: slides.map(({ id, file, image_url, text }) => ({ id, file, image_url, text })),
         finance: type === 'finansiering'
           ? { total: Number(String(finTotal).replace(/\s/g, '')), mode: finMode, expiresAt: finEnd ? new Date(finEnd + 'T23:59:59').toISOString() : null }
@@ -424,7 +378,10 @@ export function Compose({ groupId: initialGroup, type: initialType, editId }) {
         : html`${!isPersonal && html`<${GroupPicker} groups=${myGroups} value=${groupId} onChange=${(id) => { setGroupId(id); setPersonal(false); }} />`}
           ${isPersonal
             ? html`<p class="hint">Personligt inlägg – det hör inte till någon grupp. <button type="button" class="link" onClick=${() => { setPersonal(false); setGroupId(groupId || myGroups[0].id); }}>Välj en grupp i stället</button></p>`
-            : html`<button type="button" class="link subtle" onClick=${() => setPersonal(true)}>Posta utan grupp</button>`}`}
+            : html`<button type="button" class="link subtle" onClick=${() => setPersonal(true)}>Posta utan grupp</button>`}
+          ${!isPersonal && s.adminOf.has(groupId) && html`<label class="check as-group">
+            <input type="checkbox" checked=${asGroup} onChange=${(e) => setAsGroup(e.target.checked)} />
+            <span><b>Publicera som gruppen</b><small>Gruppens namn och bild visas som avsändare, med ”via ${s.me.name}” under. Bara gruppens admins kan välja det här.</small></span></label>`}`}
       </section>
 
       <section class="field">

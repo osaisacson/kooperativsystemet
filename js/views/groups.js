@@ -130,6 +130,25 @@ function HighlightEditor({ groupId, highlight, posts, onClose, onSaved }) {
     </form><//>`;
 }
 
+// Admins lägger till medlemmar: sök på namn och tryck Lägg till. Personen får en notis.
+function AddMember({ groupId, members, onAdded }) {
+  const [q, setQ] = useState('');
+  const users = useAsync(() => (q.trim().length >= 2 ? api.listUsers(q) : Promise.resolve([])), [q]);
+  const has = new Set(members.map((m) => m.user.id));
+  const hits = (users.data || []).filter((u) => !has.has(u.id)).slice(0, 6);
+  async function add(u) {
+    if (await attempt(() => api.addMember(groupId, u.id), `${u.name} är nu med i gruppen`)) { setQ(''); onAdded(); }
+  }
+  return html`<div class="pad-x add-member">
+    <input type="search" value=${q} onInput=${(e) => setQ(e.target.value)} placeholder="Lägg till medlem – skriv ett namn" aria-label="Lägg till medlem" />
+    ${q.trim().length >= 2 && html`<div class="list add-hits">
+      ${hits.map((u) => html`<div class="row" key=${u.id}><${Avatar} src=${u.avatar_url} name=${u.name} size=${36} />
+        <span class="row-main"><strong>${u.name}</strong></span><button class="btn small primary" onClick=${() => add(u)}>Lägg till</button></div>`)}
+      ${users.data && !hits.length && html`<p class="muted small">Ingen som inte redan är med heter så.</p>`}
+    </div>`}
+  </div>`;
+}
+
 export function GroupSettings({ id }) {
   const s = useStore();
   const g = useAsync(() => api.getGroup(id), [id]);
@@ -163,6 +182,7 @@ export function GroupSettings({ id }) {
     </form>
 
     <div class="label pad-x">Medlemmar och admins</div>
+    ${!grp.locked && html`<${AddMember} groupId=${id} members=${grp.members} onAdded=${g.reload} />`}
     ${grp.locked ? html`<p class="hint pad">Gruppen är låst: medlemmarna är Redaktionen. Lägg till eller ta bort någon via personens profil (Lägg till i / Ta bort ur Redaktionen).</p>` : html`<div class="list">
       ${grp.members.map((m) => {
         const me = m.user.id === s.me.id;
@@ -183,7 +203,7 @@ export function GroupSettings({ id }) {
         if (await attempt(() => api.deleteGroup(id), 'Gruppen togs bort')) { await refreshMe(); go('/'); }
       }}>Ta bort gruppen</button>
     </div>
-    <p class="hint pad">Den som skapar en grupp blir admin. Admins kan ändra namn, beskrivning och bild, utse fler admins och ta bort medlemmar. Alla medlemmar kan skapa och redigera gruppens höjdpunkter.
+    <p class="hint pad">Den som skapar en grupp blir admin. Admins kan ändra namn, beskrivning och bild, lägga till och ta bort medlemmar, utse fler admins och publicera inlägg som gruppen. Alla medlemmar kan skapa och redigera gruppens höjdpunkter.
       Om sista admin lämnar blir den som varit med längst admin. Om ingen admin varit inloggad på ett år mejlas admins, och efter 30 dagar tar den medlem som varit med längst över.</p>
   </div>`;
 }

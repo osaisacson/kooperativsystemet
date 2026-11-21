@@ -17,14 +17,23 @@
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root"><div class="splash"><img src="icon.svg" alt="" width="56" height="56" /><p id="splash-text"></p></div></div>
+  <script>
+    // Vänliga laddningstexter medan appen startar – en ny var och en halv sekund.
+    window.LADDNING = ["Vattnar odlingslådorna…", "Vänder komposten…", "Knackar på hos grannarna…", "Kokar kaffe till mötet…", "Laddar solcellerna…", "Lagar cykeln…", "Bakar surdegsbröd…", "Letar fram nycklarna till lokalen…", "Sår fröer…", "Samlar ihop gänget…"];
+    (function () {
+      var i = Math.floor(Math.random() * LADDNING.length), el = document.getElementById('splash-text');
+      function next() { var e = document.getElementById('splash-text'); if (!e) return clearInterval(t); e.textContent = LADDNING[i++ % LADDNING.length]; }
+      next(); var t = setInterval(next, 1500);
+    })();
+  </script>
   <noscript>Appen behöver JavaScript.</noscript>
   <script type="module" src="js/app.js"></script>
   <script>
     // Om appen inte startar alls (t.ex. ingen uppkoppling) visas en knapp i stället för en vit sida.
     setTimeout(function () {
       var r = document.getElementById('root');
-      if (r && !r.firstChild) r.innerHTML = '<div style="padding:48px 24px;text-align:center;font:16px -apple-system,sans-serif">'
+      if (r && r.querySelector('#splash-text')) r.innerHTML = '<div style="padding:48px 24px;text-align:center;font:16px -apple-system,sans-serif">'
         + '<p>Appen kunde inte starta. Kolla uppkopplingen.</p><button onclick="location.reload()" style="font:inherit;padding:10px 18px;border-radius:10px;border:0;background:#2f6b4f;color:#fff">Ladda om</button></div>';
     }, 12000);
   </script>

@@ -357,6 +357,23 @@ function MemoryButton({ post, onChange }) {
     <span>${count}</span><${Icon} name="memory" size=${22} /></button>`;
 }
 
+// Vem som skrivit inlägget. Personen är avsändaren – gruppen visas som en liten bild på personens bild och
+// "i Gruppnamn" under namnet: inlägget hör till gruppen, men personen talar inte för den.
+// Har en admin valt att publicera som gruppen är det tvärtom: gruppen är avsändaren och "via Namn" står under.
+export function PostHead({ post: p, children }) {
+  const g = p.group, a = p.author;
+  if (p.as_group && g) return html`<div class="post-head">
+    <a href=${'#/grupp/' + g.id}><${Avatar} src=${g.avatar_url} name=${g.name} size=${36} /></a>
+    <div class="who"><a class="strong" href=${'#/grupp/' + g.id}>${g.name}</a><a class="by" href=${'#/profil/' + a.id}>via ${a.name}</a></div>
+    ${children}</div>`;
+  return html`<div class="post-head">
+    <a class="head-avatar" href=${'#/profil/' + a.id}><${Avatar} src=${a.avatar_url} name=${a.name} size=${36} />
+      ${g && html`<span class="head-group" title=${g.name}><${Avatar} src=${g.avatar_url} name=${g.name} size=${18} /></span>`}</a>
+    <div class="who"><a class="strong" href=${'#/profil/' + a.id}>${a.name}</a>
+      ${g && html`<a class="by" href=${'#/grupp/' + g.id}>i <b>${g.name}</b></a>`}</div>
+    ${children}</div>`;
+}
+
 export function PostCard({ post: p, onChange, full = false }) {
   const [applying, setApplying] = useState(false);
   const edited = new Date(p.updated_at) - new Date(p.created_at) > 60e3;
@@ -364,15 +381,7 @@ export function PostCard({ post: p, onChange, full = false }) {
   const kind = postType(p);
   const badge = p.is_event ? 'Evenemang' : kind === 'finansiering' ? 'Finansiering' : kind === 'lokal' ? 'Lokal' : null;
   return html`<article class="post">
-    <div class="post-head">
-      ${p.group
-        ? html`<a href=${'#/grupp/' + p.group.id}><${Avatar} src=${p.group.avatar_url} name=${p.group.name} size=${34} /></a>
-          <div class="who"><a class="strong" href=${'#/grupp/' + p.group.id}>${p.group.name}</a>
-            <a class="by" href=${'#/profil/' + p.author.id}>${p.author.name}</a></div>`
-        : html`<a href=${'#/profil/' + p.author.id}><${Avatar} src=${p.author.avatar_url} name=${p.author.name} size=${34} /></a>
-          <div class="who"><a class="strong" href=${'#/profil/' + p.author.id}>${p.author.name}</a><span class="by">personligt inlägg</span></div>`}
-      <${PostMenu} post=${p} onChange=${onChange} />
-    </div>
+    <${PostHead} post=${p}><${PostMenu} post=${p} onChange=${onChange} /><//>
     ${p.slides.length ? html`<${Carousel} slides=${p.slides} badge=${badge} />`
       : html`<div class="textpost">${badge && html`<span class="img-badge corner-solo">${badge}</span>`}${p.caption}</div>`}
     <div class="post-body">
@@ -466,7 +475,7 @@ export function PostGrid({ posts, showAuthor = false, empty = 'Inga inlägg än.
   return html`<div class="grid">${posts.map((p) => html`<a class="tile" href=${'#/post/' + p.id} key=${p.id}>
     ${p.slides[0] ? html`<img src=${p.slides[0].image_url} alt="" loading="lazy" decoding="async" />` : html`<span class="tile-text">${p.caption}</span>`}
     ${p.slides.length > 1 && html`<span class="tile-icon"><${Icon} name="layers" size=${18} /></span>`}
-    ${p.finance && html`<span class="tile-fin">kr</span>`}
+    ${(p.is_event || p.finance || postType(p) === 'lokal') && html`<span class="tile-kind">${p.is_event ? 'Evenemang' : p.finance ? 'Finansiering' : 'Lokal'}</span>`}
     ${showAuthor && html`<span class="tile-author"><${Avatar} src=${p.author.avatar_url} name=${p.author.name} size=${20} /></span>`}
   </a>`)}</div>`;
 }

@@ -1,5 +1,5 @@
 // Liten global state: inloggad användare, mina grupper och siffror på ikonerna.
-import { useState, useEffect } from './lib.js';
+import { useState, useEffect, useRef } from './lib.js';
 import { api } from './api/index.js';
 import { placeFromHome } from './util.js';
 
@@ -95,19 +95,28 @@ export async function refreshMe() {
 }
 
 // Hämtar data asynkront och laddar om när beroenden ändras.
+// Allt som hämtar data registrerar sig här, så att "dra ner för att uppdatera" kan hämta om allt på sidan
+// i bakgrunden – utan att sidan laddas om eller hoppar.
+const refreshers = new Set();
+export function onRefresh(fn) { refreshers.add(fn); return () => refreshers.delete(fn); }
+export const refreshAll = () => Promise.all([...refreshers].map((f) => Promise.resolve(f()).catch(() => {})));
+
 export function useAsync(fn, deps = []) {
   const [s, set] = useState({ loading: true, data: null, error: null });
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    let alive = true;
+  const fnRef = useRef(fn); fnRef.current = fn;
+  const token = useRef(0);
+  const run = () => {
+    const t = ++token.current;
     set((x) => ({ ...x, loading: true }));
-    fn().then(
-      (data) => alive && set({ loading: false, data, error: null }),
-      (error) => { console.error(error); alive && set({ loading: false, data: null, error }); },
+    return fnRef.current().then(
+      (data) => { if (t === token.current) set({ loading: false, data, error: null }); },
+      (error) => { console.error(error); if (t === token.current) set((x) => ({ loading: false, data: x.data, error: x.data ? null : error })); },
     );
-    return () => { alive = false; };
-  }, [...deps, n]);
-  return { ...s, reload: () => setN((x) => x + 1) };
+  };
+  const runRef = useRef(run); runRef.current = run;
+  useEffect(() => { runRef.current(); }, deps);
+  useEffect(() => { const off = onRefresh(() => runRef.current()); return () => { off(); token.current++; }; }, []);
+  return { ...s, reload: () => runRef.current() };
 }
 
 // Kör en åtgärd och visar felet som toast i stället för att krascha.

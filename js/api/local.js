@@ -272,6 +272,13 @@ export const api = {
     if (m.role === 'admin' && was !== 'admin' && uid !== me) notify(uid, 'admin', `gjorde dig till admin för ${groupOf(gid).name}`, { actor_id: me, group_id: gid });
     ensureAdmin(gid); persist();
   },
+  async addMember(gid, uid) {
+    const me = needAdmin(gid);
+    const g = db.groups.find((x) => x.id === gid);
+    if (g.locked) throw new Error('Gruppen är låst – medlemmarna är Redaktionen.');
+    if (!membership(gid, uid)) { db.members.push({ group_id: gid, user_id: uid, role: 'member', joined_at: now() }); if (uid !== me) notify(uid, 'admin', `lade till dig i ${g.name}`, { actor_id: me, group_id: gid }); }
+    persist();
+  },
   async removeMember(gid, uid) {
     if (uid !== needMe()) needAdmin(gid);
     db.members = db.members.filter((m) => !(m.group_id === gid && m.user_id === uid));
@@ -320,7 +327,7 @@ export const api = {
     if (v.groupId && !membership(v.groupId, me)) throw new Error('Du kan bara posta i grupper du är med i.');
     const t = now();
     const post = {
-      id: uuid(), author_id: me, group_id: v.groupId, caption: v.caption, kind: v.kind, is_resource: v.isResource, categories: v.categories,
+      id: uuid(), author_id: me, group_id: v.groupId, as_group: v.asGroup && membership(v.groupId, me)?.role === 'admin', caption: v.caption, kind: v.kind, is_resource: v.isResource, categories: v.categories,
       space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null, ...eventColumns(v.event),
       fin_total: v.finance?.total ?? null, fin_mode: v.finance?.mode ?? null, fin_expires_at: v.finance?.expiresAt ?? null, fin_closed: false,
       created_at: t, updated_at: t, last_activity_at: t, slides: await buildSlides(v.slides),
@@ -336,7 +343,7 @@ export const api = {
     const v = normalizePostInput(input);
     if (p.fin_total != null && !v.finance) throw new Error('Ett finansieringsinlägg kan inte byta typ. Stäng det i stället via ··· på inlägget.');
     if (v.groupId && v.groupId !== p.group_id && !membership(v.groupId, me)) throw new Error('Du kan bara posta i grupper du är med i.');
-    Object.assign(p, { group_id: v.groupId, caption: v.caption, kind: v.kind, is_resource: v.isResource, categories: v.categories, updated_at: now(),
+    Object.assign(p, { group_id: v.groupId, as_group: v.asGroup && membership(v.groupId, me)?.role === 'admin', caption: v.caption, kind: v.kind, is_resource: v.isResource, categories: v.categories, updated_at: now(),
       space_functions: v.space?.functions || [], space_cost: v.space?.cost ?? null, space_price: v.space?.price ?? null, ...eventColumns(v.event) });
     if (v.finance) {
       if (p.fin_total == null) Object.assign(p, { fin_total: v.finance.total, fin_mode: v.finance.mode });

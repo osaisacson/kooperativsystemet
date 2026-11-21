@@ -1,7 +1,7 @@
 // Startpunkt: enkel hash-router (#/sökväg) + bottenmenyn.
 import { html, render, useState, useEffect, Component } from './lib.js';
 import { api } from './api/index.js';
-import { useStore, refreshMe, refreshBadges, toast } from './store.js';
+import { useStore, refreshMe, refreshBadges, refreshAll, toast } from './store.js';
 import { Icon, Avatar, Count } from './ui.js';
 import { Home, PostView, Compose } from './views/feed.js';
 import { GroupView, GroupSettings, NewGroup, Welcome } from './views/groups.js';
@@ -9,6 +9,7 @@ import { AuthView, Search, Profile, EditProfile, NewPassword } from './views/peo
 import { Notifications, Todos, Inbox, Thread, NewMessage } from './views/inbox.js';
 import { MapView } from './views/map.js';
 import { Help, Feedback, FeedbackView } from './views/help.js';
+import { InstallSheet } from './install.js';
 
 function parse() {
   let h = location.hash.slice(1);
@@ -59,31 +60,40 @@ function BottomNav({ r }) {
   </nav>`;
 }
 
-// Dra ner överst på sidan för att uppdatera (som i andra appar). Sidan laddas om inifrån, så att man stannar kvar.
-// I Safari utanför hemskärmsappen gör webbläsaren det själv, så där används den inbyggda.
+// Dra ner överst på sidan för att uppdatera, som i Instagram: sidan följer fingret (allt trögare ju längre man drar),
+// en ring fylls i glappet, och släpper man efter tröskeln snurrar den medan allt hämtas om i bakgrunden.
+// Sidan laddas inte om, så man stannar där man är. I Safari utanför hemskärmsappen sköter webbläsaren det själv.
+const PTR_AT = 60;     // hur långt man måste dra (efter tröghet)
+const PTR_HOLD = 52;   // där sidan stannar medan det uppdateras
 function usePullToRefresh(onRefresh) {
-  const [pull, setPull] = useState(0);
+  const [st, setSt] = useState({ y: 0, state: 'idle' });   // idle | pull | busy | back
   useEffect(() => {
     const ios = /iphone|ipad/i.test(navigator.userAgent);
     const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
     if (ios && !standalone) return;
-    let startY = null, dist = 0;
+    let startY = null, y = 0, busy = false;
     const down = (e) => {
-      if (window.scrollY > 0 || document.body.classList.contains('locked') || e.touches.length !== 1) return;
-      if (e.target.closest('input, textarea, select, .map-box, .modal, .sheet')) return;
-      startY = e.touches[0].clientY; dist = 0;
+      if (busy || window.scrollY > 0 || document.body.classList.contains('locked') || e.touches.length !== 1) return;
+      if (e.target.closest('input, textarea, select, .map-box, .modal, .sheet, .carousel')) return;
+      startY = e.touches[0].clientY; y = 0;
     };
     const move = (e) => {
       if (startY == null) return;
-      dist = e.touches[0].clientY - startY;
-      if (dist <= 0 || window.scrollY > 0) { setPull(0); return; }
-      setPull(Math.min(dist * 0.5, 90));
+      const d = e.touches[0].clientY - startY;
+      if (d <= 0 || window.scrollY > 0) { if (y) setSt({ y: 0, state: 'idle' }); y = 0; return; }
+      y = Math.min(130, d < 110 ? d * 0.6 : 66 + (d - 110) * 0.25);   // gummibandskänsla: allt trögare ju längre man drar
+      setSt({ y, state: 'pull' });
     };
-    const up = () => {
+    const up = async () => {
       if (startY == null) return;
       startY = null;
-      if (dist * 0.5 >= 65) { setPull(-1); Promise.resolve(onRefresh()).finally(() => setTimeout(() => setPull(0), 400)); }
-      else setPull(0);
+      if (y < PTR_AT) { setSt({ y: 0, state: 'back' }); return; }
+      busy = true;
+      if (navigator.vibrate) navigator.vibrate(8);
+      setSt({ y: PTR_HOLD, state: 'busy' });
+      await Promise.all([onRefresh(), new Promise((r) => setTimeout(r, 700))]);
+      setSt({ y: 0, state: 'back' });
+      busy = false;
     };
     addEventListener('touchstart', down, { passive: true });
     addEventListener('touchmove', move, { passive: true });
@@ -91,7 +101,24 @@ function usePullToRefresh(onRefresh) {
     addEventListener('touchcancel', up);
     return () => { removeEventListener('touchstart', down); removeEventListener('touchmove', move); removeEventListener('touchend', up); removeEventListener('touchcancel', up); };
   }, []);
-  return pull;
+  return st;
+}
+
+function PullIndicator({ y, state }) {
+  const p = Math.min(1, y / PTR_AT);
+  const r = 9, c = 2 * Math.PI * r;
+  return html`<div class=${'ptr ' + state} style=${`opacity:${state === 'busy' ? 1 : p}; transform: translateY(${Math.max(0, y - 40)}px) scale(${0.6 + 0.4 * p})`} aria-hidden="true">
+    <svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r=${r} fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+      stroke-dasharray=${c} stroke-dashoffset=${state === 'busy' ? c * 0.72 : c * (1 - p * 0.9)} transform="rotate(-90 13 13)" /></svg>
+  </div>`;
+}
+
+// Samma vänliga laddningstexter som i index.html, medan inloggningen kollas.
+function Splash() {
+  const list = window.LADDNING || ['Laddar…'];
+  const [i, setI] = useState(() => Math.floor(Math.random() * list.length));
+  useEffect(() => { const t = setInterval(() => setI((x) => x + 1), 1500); return () => clearInterval(t); }, []);
+  return html`<div class="splash"><img src="icon.svg" alt="" width="56" height="56" /><p key=${i}>${list[i % list.length]}</p></div>`;
 }
 
 // Fångar fel på en sida så att appen inte blir en vit, fryst skärm.
@@ -113,8 +140,7 @@ function App() {
   const s = useStore();
   const [r, setR] = useState(parse());
   const [ready, setReady] = useState(false);
-  const [fresh, setFresh] = useState(0);   // ökas för att ladda om sidan
-  const pull = usePullToRefresh(async () => { setFresh((x) => x + 1); await Promise.all([refreshMe(), refreshBadges()]).catch(() => {}); });
+  const pull = usePullToRefresh(() => Promise.all([refreshAll(), refreshMe().catch(() => {}), refreshBadges()]));
   useEffect(() => {
     const onHash = () => {
       setR(parse()); window.scrollTo(0, 0); refreshBadges();
@@ -133,16 +159,18 @@ function App() {
     document.addEventListener('visibilitychange', onVisible);
     return () => { removeEventListener('hashchange', onHash); off(); clearInterval(t); document.removeEventListener('visibilitychange', onVisible); };
   }, []);
-  if (!ready) return html`<div class="splash">…</div>`;
+  if (!ready) return html`<${Splash} />`;
   return html`<div class="app">
-    ${s.recovering ? html`<${NewPassword} />` : s.me ? html`<div class=${'ptr' + (pull ? ' on' : '') + (pull === -1 ? ' spin' : '')} style=${pull > 0 ? `height:${pull}px` : ''} aria-hidden="true">
-      <span class=${'ptr-icon' + (pull >= 65 ? ' ready' : '')}>↻</span></div>
-      <main key=${r.path + '?' + r.query + '#' + fresh} class=${['karta', 'grupp', 'profil', undefined].includes(r.parts[0]) && r.parts[2] !== 'installningar' ? 'wide' : ''} data-page=${r.parts[0] || 'hem'}><${Safe}>${route(r)}<//></main><${BottomNav} r=${r} />` : html`<${AuthView} />`}
+    ${s.recovering ? html`<${NewPassword} />` : s.me ? html`<${PullIndicator} ...${pull} />
+      <main key=${r.path + '?' + r.query} style=${pull.y ? `transform: translateY(${pull.y}px)` : ''} data-ptr=${pull.state} class=${['karta', 'grupp', 'profil', undefined].includes(r.parts[0]) && r.parts[2] !== 'installningar' ? 'wide' : ''} data-page=${r.parts[0] || 'hem'}><${Safe}>${route(r)}<//></main><${BottomNav} r=${r} />` : html`<${AuthView} />`}
+    <${InstallSheet} />
     ${s.toast && html`<div class="toast" role="status">${s.toast}</div>`}
   </div>`;
 }
 
-render(html`<${App} />`, document.getElementById('root'));
+const root = document.getElementById('root');
+root.textContent = '';   // den statiska laddningstexten från index.html ersätts av appens egen
+render(html`<${App} />`, root);
 
 // Service worker för push-notiser (och siffran på appikonen när appen är stängd)
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

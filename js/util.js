@@ -210,7 +210,7 @@ export function normalizePostInput(input) {
     event = { start: start.toISOString(), end: end ? end.toISOString() : null, address: (e.address || '').trim() || null, postcode: e.postcode || null,
       city: e.city || null, region: e.region || null, country: e.country || null, lat: e.lat ?? null, lng: e.lng ?? null, rsvp: e.rsvp !== false };
   }
-  return { groupId: input.groupId || null, caption, slides, kind, categories, isResource: kind !== 'vanlig' || categories.length > 0, finance, space, event };
+  return { groupId: input.groupId || null, asGroup: !!(input.asGroup && input.groupId), caption, slides, kind, categories, isResource: kind !== 'vanlig' || categories.length > 0, finance, space, event };
 }
 
 export async function resizeImage(file, max = 1280, quality = 0.82) {
